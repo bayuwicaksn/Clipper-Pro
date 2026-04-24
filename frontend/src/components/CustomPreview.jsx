@@ -61,21 +61,45 @@ const CustomPreview = ({
     });
   }, [cropZ]);
 
+  const [isSnappedX, setIsSnappedX] = useState(false);
+  const [isSnappedY, setIsSnappedY] = useState(false);
+
   useEffect(() => {
-    if (!dragState) return;
+    if (!dragState) {
+      setIsSnappedX(false);
+      setIsSnappedY(false);
+      return;
+    }
 
     const handleMouseMove = (e) => {
       const dx = e.clientX - dragState.startX;
       const dy = e.clientY - dragState.startY;
 
       if (dragState.type === 'pan') {
-        // Sensitivity depends on zoom level
-        const sensitivity = 0.002 / (cropZ || 1.0);
-        setCropX(Math.max(0, Math.min(1, dragState.initialX - dx * sensitivity)));
-        setCropY(Math.max(0, Math.min(1, dragState.initialY - dy * sensitivity)));
+        const container = videoRef.current?.parentElement;
+        if (!container) return;
+
+        const sensitivityX = 1 / (container.clientWidth * (cropZ || 1.0));
+        const sensitivityY = 1 / (container.clientHeight * (cropZ || 1.0));
+
+        let newX = dragState.initialX - dx * sensitivityX;
+        let newY = dragState.initialY - dy * sensitivityY;
+
+        // Snapping Logic (Center)
+        const snapThreshold = 0.015;
+        const snappedX = Math.abs(newX - 0.5) < snapThreshold;
+        const snappedY = Math.abs(newY - 0.5) < snapThreshold;
+
+        if (snappedX) newX = 0.5;
+        if (snappedY) newY = 0.5;
+
+        setIsSnappedX(snappedX);
+        setIsSnappedY(snappedY);
+
+        setCropX(Math.max(0, Math.min(1, newX)));
+        setCropY(Math.max(0, Math.min(1, newY)));
       } else if (dragState.type === 'resize') {
         const sensitivity = 0.005;
-        // Invert dy based on handle
         const zoomDelta = (dragState.handle.includes('t') ? -dy : dy) * sensitivity;
         setCropZ(Math.max(1.0, Math.min(5.0, dragState.initialZ + zoomDelta)));
       }
@@ -196,17 +220,17 @@ const CustomPreview = ({
   const safeX = cropX || 0.5;
   const safeY = cropY || 0.5;
 
-  const videoTransform = appMode === 'editor' 
-    ? `scale(${safeZ}) translate(${(0.5 - safeX) * 100}%, ${(0.5 - safeY) * 100}%)` 
+  const videoTransform = appMode === 'editor'
+    ? `scale(${safeZ}) translate(${(0.5 - safeX) * 100}%, ${(0.5 - safeY) * 100}%)`
     : 'none';
 
   return (
     <div className="w-full h-full flex items-center justify-center bg-black rounded-xl overflow-hidden shadow-2xl relative">
-      
+
       <div className="w-full h-full relative flex items-center justify-center overflow-hidden">
-        
+
         {/* PROPORTIONAL VIDEO WRAPPER */}
-        <div 
+        <div
           style={{
             position: 'relative',
             maxWidth: '100%',
@@ -220,8 +244,8 @@ const CustomPreview = ({
             alignItems: 'center',
             justifyContent: 'center',
             // High visibility border in Editor Mode
-            outline: appMode === 'editor' 
-              ? (dragState ? '4px solid #3b82f6' : '2px solid #3b82f6') 
+            outline: appMode === 'editor'
+              ? (dragState ? '4px solid #3b82f6' : '2px solid #3b82f6')
               : 'none',
             boxShadow: (appMode === 'editor' && dragState) ? '0 0 30px rgba(59, 130, 246, 0.6)' : 'none',
           }}
@@ -245,7 +269,7 @@ const CustomPreview = ({
           {appMode === 'editor' && (
             <>
               {/* Internal Panning Area */}
-              <div 
+              <div
                 className="absolute inset-0 cursor-move pointer-events-auto z-10"
                 onMouseDown={startPan}
               />
@@ -264,12 +288,35 @@ const CustomPreview = ({
           <div className="absolute inset-0 z-0 pointer-events-auto cursor-move" onMouseDown={startPan} />
         )}
 
-        {/* 9:16 Mask (Visual Guide) */}
-        {appMode === 'editor' && aspectRatio === '9:16' && (
+        {/* 9:16 Mask & Vertical Frame Guidelines */}
+        {appMode === 'editor' && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-[20]">
-            <div className="h-full bg-black/80 flex-1 border-r border-white/10" />
-            <div className="h-full border-x border-white/20 shadow-[0_0_100px_rgba(0,0,0,0.9)]" style={{ aspectRatio: '9/16' }} />
-            <div className="h-full bg-black/80 flex-1 border-l border-white/10" />
+            {aspectRatio === '9:16' ? (
+              <>
+                <div className="h-full bg-black/80 flex-1 border-r border-white/10" />
+                <div 
+                  className="h-full border-x border-white/20 shadow-[0_0_100px_rgba(0,0,0,0.9)] relative" 
+                  style={{ aspectRatio: '9/16' }}
+                >
+                  {/* SNAP LINES (ONLY INSIDE VERTICAL FRAME) */}
+                  {dragState && isSnappedX && (
+                    <div className="absolute left-1/2 top-0 h-full w-[1px] bg-blue-400/50 -translate-x-1/2" />
+                  )}
+                  {dragState && isSnappedY && (
+                    <div className="absolute top-1/2 left-0 w-full h-[1px] bg-blue-400/50 -translate-y-1/2" />
+                  )}
+                </div>
+                <div className="h-full bg-black/80 flex-1 border-l border-white/10" />
+              </>
+            ) : (
+              /* Horizontal Frame Guidelines */
+              dragState && (isSnappedX || isSnappedY) && (
+                <div className="absolute inset-0">
+                  {isSnappedX && <div className="absolute left-1/2 top-0 h-full w-[1px] bg-blue-400/30 -translate-x-1/2" />}
+                  {isSnappedY && <div className="absolute top-1/2 left-0 w-full h-[1px] bg-blue-400/30 -translate-y-1/2" />}
+                </div>
+              )
+            )}
           </div>
         )}
 
