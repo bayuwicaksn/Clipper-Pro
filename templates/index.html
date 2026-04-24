@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClipperApp — AI Video Clipper</title>
+    <meta name="description" content="Transform long YouTube videos into viral short-form clips with AI. Powered by GPT-4, Whisper, and FFmpeg.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <!-- ─── Header ─────────────────────────────────────────────── -->
+    <header class="app-header" id="app-header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 40 40" fill="none">
+                        <rect width="40" height="40" rx="10" fill="url(#logo-gradient)"/>
+                        <path d="M15 12L28 20L15 28V12Z" fill="white"/>
+                        <path d="M18 16L24 20L18 24V16Z" fill="rgba(0,0,0,0.3)"/>
+                        <defs><linearGradient id="logo-gradient" x1="0" y1="0" x2="40" y2="40"><stop stop-color="#8B5CF6"/><stop offset="1" stop-color="#06B6D4"/></linearGradient></defs>
+                    </svg>
+                </div>
+                <span class="logo-text">ClipperApp</span>
+                <span class="logo-badge">AI</span>
+            </div>
+            <div class="header-status" id="connection-status">
+                <span class="status-dot"></span>
+                <span>Ready</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- ─── Main Content ───────────────────────────────────────── -->
+    <main class="app-main">
+        <!-- Input Section -->
+        <section class="section section-input" id="section-input">
+            <div class="section-glow"></div>
+            <h1 class="section-title">
+                <span class="title-icon">🎬</span>
+                Transform Videos into Viral Clips
+            </h1>
+            <p class="section-subtitle">Paste a YouTube URL and let AI find the most engaging moments</p>
+
+            <div class="input-group" id="url-input-group">
+                <div class="input-wrapper">
+                    <svg class="input-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                    </svg>
+                    <input type="url" id="youtube-url" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off">
+                    <button class="btn btn-primary btn-process" id="btn-process" onclick="startProcessing()">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        <span>Process</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Settings Toggle -->
+            <button class="settings-toggle" id="settings-toggle" onclick="toggleSettings()">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+                </svg>
+                <span>Settings</span>
+                <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+            </button>
+
+            <!-- Settings Panel -->
+            <div class="settings-panel" id="settings-panel">
+                <div class="settings-grid">
+                    <div class="setting-card setting-card-wide">
+                        <label class="setting-label">YouTube Cookies (for bot detection bypass)</label>
+                        <div class="cookies-upload">
+                            <input type="file" id="cookies-file" accept=".txt" onchange="uploadCookies(this)" hidden>
+                            <button class="btn btn-secondary btn-sm" onclick="document.getElementById('cookies-file').click()">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                <span>Upload cookies.txt</span>
+                            </button>
+                            <span class="cookies-status" id="cookies-status">No file uploaded</span>
+                        </div>
+                    </div>
+                    <div class="setting-card">
+                        <label class="setting-label">Number of Clips</label>
+                        <div class="setting-control">
+                            <input type="range" id="num-clips" min="1" max="10" value="5" oninput="updateRangeDisplay(this)">
+                            <span class="range-value" id="num-clips-val">5</span>
+                        </div>
+                    </div>
+                    <div class="setting-card">
+                        <label class="setting-label">Min Duration (sec)</label>
+                        <div class="setting-control">
+                            <input type="range" id="min-duration" min="15" max="60" value="30" step="5" oninput="updateRangeDisplay(this)">
+                            <span class="range-value" id="min-duration-val">30</span>
+                        </div>
+                    </div>
+                    <div class="setting-card">
+                        <label class="setting-label">Max Duration (sec)</label>
+                        <div class="setting-control">
+                            <input type="range" id="max-duration" min="30" max="180" value="90" step="10" oninput="updateRangeDisplay(this)">
+                            <span class="range-value" id="max-duration-val">90</span>
+                        </div>
+                    </div>
+                    <div class="setting-card">
+                        <label class="setting-label">Reframe Mode</label>
+                        <select id="reframe-mode" class="setting-select">
+                            <option value="opencv">OpenCV (Fast)</option>
+                            <option value="mediapipe">MediaPipe (Smart)</option>
+                        </select>
+                    </div>
+                    <div class="setting-card">
+                        <label class="setting-label">TTS Voice</label>
+                        <select id="tts-voice" class="setting-select">
+                            <option value="alloy">Alloy</option>
+                            <option value="echo">Echo</option>
+                            <option value="fable">Fable</option>
+                            <option value="onyx">Onyx</option>
+                            <option value="nova">Nova</option>
+                            <option value="shimmer">Shimmer</option>
+                        </select>
+                    </div>
+                    <div class="setting-card setting-toggle-card">
+                        <label class="setting-label">Hook Intro</label>
+                        <label class="toggle">
+                            <input type="checkbox" id="enable-hook" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="setting-card setting-toggle-card">
+                        <label class="setting-label">Auto Captions</label>
+                        <label class="toggle">
+                            <input type="checkbox" id="enable-captions" checked>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Progress Section (hidden by default) -->
+        <section class="section section-progress hidden" id="section-progress">
+            <h2 class="section-title">
+                <span class="title-icon">⚡</span>
+                Processing Pipeline
+            </h2>
+
+            <div class="pipeline-steps" id="pipeline-steps">
+                <div class="pipeline-step" data-step="download">
+                    <div class="step-icon">📥</div>
+                    <div class="step-info">
+                        <div class="step-name">Download</div>
+                        <div class="step-detail">Downloading video & subtitles</div>
+                    </div>
+                    <div class="step-status"><span class="step-badge">Waiting</span></div>
+                </div>
+                <div class="pipeline-step" data-step="analyze">
+                    <div class="step-icon">🧠</div>
+                    <div class="step-info">
+                        <div class="step-name">AI Analysis</div>
+                        <div class="step-detail">Finding highlight moments</div>
+                    </div>
+                    <div class="step-status"><span class="step-badge">Waiting</span></div>
+                </div>
+                <div class="pipeline-step" data-step="clip">
+                    <div class="step-icon">✂️</div>
+                    <div class="step-info">
+                        <div class="step-name">Clipping</div>
+                        <div class="step-detail">Cutting segments</div>
+                    </div>
+                    <div class="step-status"><span class="step-badge">Waiting</span></div>
+                </div>
+                <div class="pipeline-step" data-step="reframe">
+                    <div class="step-icon">📱</div>
+                    <div class="step-info">
+                        <div class="step-name">Reframe</div>
+                        <div class="step-detail">Converting to 9:16 portrait</div>
+                    </div>
+                    <div class="step-status"><span class="step-badge">Waiting</span></div>
+                </div>
+                <div class="pipeline-step" data-step="hook">
+                    <div class="step-icon">🪝</div>
+                    <div class="step-info">
+                        <div class="step-name">Hook</div>
+                        <div class="step-detail">Generating intro scenes</div>
+                    </div>
+                    <div class="step-status"><span class="step-badge">Waiting</span></div>
+                </div>
+                <div class="pipeline-step" data-step="caption">
+                    <div class="step-icon">📝</div>
+                    <div class="step-info">
+                        <div class="step-name">Captions</div>
+                        <div class="step-detail">Adding word-by-word captions</div>
+                    </div>
+                    <div class="step-status"><span class="step-badge">Waiting</span></div>
+                </div>
+                <div class="pipeline-step" data-step="finalize">
+                    <div class="step-icon">✅</div>
+                    <div class="step-info">
+                        <div class="step-name">Finalize</div>
+                        <div class="step-detail">Saving output & metadata</div>
+                    </div>
+                    <div class="step-status"><span class="step-badge">Waiting</span></div>
+                </div>
+            </div>
+
+            <!-- Overall progress bar -->
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="overall-progress" style="width: 0%"></div>
+            </div>
+            <p class="progress-text" id="progress-text">Initializing...</p>
+        </section>
+
+        <!-- Results Section (hidden by default) -->
+        <section class="section section-results hidden" id="section-results">
+            <h2 class="section-title">
+                <span class="title-icon">🎉</span>
+                Your Clips
+            </h2>
+            <p class="section-subtitle" id="results-subtitle">Generated clips ready to download</p>
+
+            <div class="clips-grid" id="clips-grid">
+                <!-- Clip cards dynamically inserted -->
+            </div>
+
+            <div class="results-actions">
+                <button class="btn btn-secondary" onclick="resetApp()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                    <span>Process Another Video</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- Editor Section (hidden by default) -->
+        <section class="section section-editor hidden" id="section-editor">
+            <h2 class="section-title">
+                <span class="title-icon">✏️</span>
+                Clip Editor
+            </h2>
+            <div class="layout-box">
+                <div class="layout-header">
+                    <div class="nav-dot"></div>
+                    <div class="nav-dot"></div>
+                    <div class="nav-dot"></div>
+                    <div style="flex:1; display:flex; gap:6px; margin-left:8px;">
+                        <button class="btn btn-secondary btn-sm" onclick="closeEditor()" style="padding: 4px 10px; min-height: 24px; border-radius: 6px;">← Back</button>
+                        <div class="nav-tab active">editor</div>
+                        <div class="nav-tab" onclick="downloadEditorClip()">export</div>
+                    </div>
+                </div>
+                <div class="layout-body">
+                    <!-- Panel 1: Video preview -->
+                    <div class="layout-panel">
+                        <div class="panel-label">Preview</div>
+                        <div class="video-thumb">
+                            <video id="editor-video" controls playsinline></video>
+                            <div class="vertical-frame"></div>
+                        </div>
+                        <div class="timeline-bar">
+                            <div class="timeline-fill" id="editor-timeline-fill" style="width:100%"></div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; font-size:10px; font-family:'DM Mono',monospace; color:var(--color-text-tertiary);">
+                            <span id="editor-time-start">0:00</span>
+                            <span id="editor-time-end">0:00</span>
+                        </div>
+                        <div style="margin-top:12px; display:flex; gap:6px; flex-wrap:wrap;">
+                            <div class="editor-action-btn">✂ trim</div>
+                            <div class="editor-action-btn">🔇 mute</div>
+                            <div class="editor-action-btn">🎵 bgm</div>
+                            <div class="editor-action-btn">📐 crop</div>
+                        </div>
+                    </div>
+
+                    <!-- Panel 2: Generated clips -->
+                    <div class="layout-panel">
+                        <div class="panel-label">Related Clips</div>
+                        <div id="editor-clips-list">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Panel 3: Captions -->
+                    <div class="layout-panel">
+                        <div class="panel-label">Captions</div>
+                        <div id="editor-captions-list">
+                            <div class="cap-line">
+                                <span class="cap-ts">ℹ️</span>
+                                <span>Caption data will appear here.</span>
+                            </div>
+                        </div>
+                        <div style="margin-top:12px; display:flex; gap:6px; flex-wrap:wrap;">
+                            <div class="editor-action-btn">font style</div>
+                            <div class="editor-action-btn">animation</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Project Library Section -->
+        <section class="section section-library" id="section-library">
+            <div class="library-header">
+                <h2 class="section-title">
+                    <span class="title-icon">📚</span>
+                    Project Library
+                </h2>
+                <button class="btn btn-secondary btn-sm" onclick="loadProjects()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    <span>Refresh</span>
+                </button>
+            </div>
+            <p class="section-subtitle">Access clips from your previously processed videos</p>
+
+            <div class="projects-grid" id="projects-grid">
+                <!-- Project cards dynamically inserted -->
+                <div class="loading-state">
+                    <span class="spinner"></span>
+                    <span>Loading projects...</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Error Section (hidden) -->
+        <section class="section section-error hidden" id="section-error">
+            <div class="error-card">
+                <div class="error-icon">⚠️</div>
+                <h3>Something went wrong</h3>
+                <p id="error-message">An error occurred during processing.</p>
+                <button class="btn btn-secondary" onclick="resetApp()">Try Again</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- ─── Footer ─────────────────────────────────────────────── -->
+    <footer class="app-footer">
+        <p>ClipperApp — Powered by OpenAI GPT-4, Whisper & FFmpeg</p>
+    </footer>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+
+# Project Specific
+workspace/
+logs/
+static/exports/
+clipperApp_project.zip
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

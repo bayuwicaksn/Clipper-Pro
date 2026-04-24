@@ -1,0 +1,20 @@
+name: clipperapp
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - numpy>=1.24
+  - opencv=4.8
+  - pip:
+      - flask>=3.0.0
+      - openai>=1.0.0
+      - "yt-dlp[default]"
+      - mediapipe>=0.10.0
+      - Pillow>=10.0.0
+      - pysrt>=1.1.2
+      - requests>=2.31.0
+      - python-dotenv>=1.0.0
+      - ultralytics>=8.0.0
+      - torch>=2.0.0
