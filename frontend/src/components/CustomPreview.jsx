@@ -63,6 +63,7 @@ const CustomPreview = ({
 
   const [isSnappedX, setIsSnappedX] = useState(false);
   const [isSnappedY, setIsSnappedY] = useState(false);
+  const [isSnappedZ, setIsSnappedZ] = useState(false);
 
   useEffect(() => {
     if (!dragState) {
@@ -101,7 +102,44 @@ const CustomPreview = ({
       } else if (dragState.type === 'resize') {
         const sensitivity = 0.005;
         const zoomDelta = (dragState.handle.includes('t') ? -dy : dy) * sensitivity;
-        setCropZ(Math.max(1.0, Math.min(5.0, dragState.initialZ + zoomDelta)));
+        let newZ = dragState.initialZ + zoomDelta;
+
+        // MULTI-RATIO SIZE SNAPPING
+        const container = videoRef.current?.parentElement;
+        if (container) {
+          const videoAR = videoAspectRatio || 16/9;
+          const W_p = container.clientWidth;
+          const H_p = container.clientHeight;
+          const W_dom = Math.min(W_p, H_p * videoAR);
+          const H_dom = Math.min(H_p, W_p / videoAR);
+          
+          const ratios = [
+            { name: '9:16', val: 9/16 },
+            { name: '4:5', val: 4/5 },
+            { name: '1:1', val: 1/1 },
+            { name: 'Fit', val: videoAR }
+          ];
+          
+          const snapPoints = [1.0];
+          ratios.forEach(r => {
+            const W_m = Math.min(W_p, H_p * r.val);
+            const H_m = Math.min(H_p, W_p / r.val);
+            snapPoints.push(W_m / W_dom, H_m / H_dom);
+          });
+
+          const zSnapThreshold = 0.06; // Stronger magnetic feel
+          let snapped = false;
+          for (const pt of snapPoints) {
+            if (Math.abs(newZ - pt) < zSnapThreshold) {
+              newZ = pt;
+              snapped = true;
+              break;
+            }
+          }
+          setIsSnappedZ(snapped);
+        }
+
+        setCropZ(Math.max(0.1, Math.min(10.0, newZ)));
       }
     };
 
@@ -288,32 +326,32 @@ const CustomPreview = ({
           <div className="absolute inset-0 z-0 pointer-events-auto cursor-move" onMouseDown={startPan} />
         )}
 
-        {/* 9:16 Mask & Vertical Frame Guidelines */}
+        {/* DYNAMIC SAFE AREA MASK & SMART SNAPPING */}
         {appMode === 'editor' && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-[20]">
-            {aspectRatio === '9:16' ? (
+            {(aspectRatio === '9:16' || aspectRatio === '4:5' || aspectRatio === '1:1') ? (
               <>
                 <div className="h-full bg-black/80 flex-1 border-r border-white/10" />
                 <div 
-                  className="h-full border-x border-white/20 shadow-[0_0_100px_rgba(0,0,0,0.9)] relative" 
-                  style={{ aspectRatio: '9/16' }}
+                  className={`h-full border-x transition-colors duration-200 shadow-[0_0_100px_rgba(0,0,0,0.9)] relative ${isSnappedZ ? 'border-blue-400/80' : 'border-white/20'}`} 
+                  style={{ aspectRatio: aspectRatio.replace(':', '/') }}
                 >
-                  {/* SNAP LINES (ONLY INSIDE VERTICAL FRAME) */}
+                  {/* SNAP LINES (CLIPPED TO ACTIVE FRAME) */}
                   {dragState && isSnappedX && (
-                    <div className="absolute left-1/2 top-0 h-full w-[1px] bg-blue-400/50 -translate-x-1/2" />
+                    <div className="absolute left-1/2 top-0 h-full w-[1.5px] bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)] -translate-x-1/2" />
                   )}
                   {dragState && isSnappedY && (
-                    <div className="absolute top-1/2 left-0 w-full h-[1px] bg-blue-400/50 -translate-y-1/2" />
+                    <div className="absolute top-1/2 left-0 w-full h-[1.5px] bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)] -translate-y-1/2" />
                   )}
                 </div>
                 <div className="h-full bg-black/80 flex-1 border-l border-white/10" />
               </>
             ) : (
-              /* Horizontal Frame Guidelines */
+              /* Global Snapping Lines for Horizontal */
               dragState && (isSnappedX || isSnappedY) && (
                 <div className="absolute inset-0">
-                  {isSnappedX && <div className="absolute left-1/2 top-0 h-full w-[1px] bg-blue-400/30 -translate-x-1/2" />}
-                  {isSnappedY && <div className="absolute top-1/2 left-0 w-full h-[1px] bg-blue-400/30 -translate-y-1/2" />}
+                  {isSnappedX && <div className="absolute left-1/2 top-0 h-full w-[1.5px] bg-blue-400/60 -translate-x-1/2" />}
+                  {isSnappedY && <div className="absolute top-1/2 left-0 w-full h-[1.5px] bg-blue-400/60 -translate-y-1/2" />}
                 </div>
               )
             )}
