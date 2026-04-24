@@ -48,6 +48,7 @@ class ExportRequest(BaseModel):
     segments: Optional[list] = None
     caption_settings: Optional[dict] = None
     transcript: Optional[list] = None
+    aspect_ratio: str = '9:16'
 
 
 class ReprocessRequest(BaseModel):
@@ -334,7 +335,8 @@ async def export_clip(job_id: str, data: ExportRequest):
                 custom_end=data.custom_end, 
                 custom_crop_x=data.custom_crop_x,
                 segments=data.segments,
-                clip_index=clip_index
+                clip_index=clip_index,
+                aspect_ratio=data.aspect_ratio
             )
             
             session_path = os.path.join(job_dir, 'session.json')

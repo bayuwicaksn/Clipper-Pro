@@ -148,16 +148,15 @@ def get_source_transcript(job_dir, force=False, provider='openai-whisper'):
                         words.append({'word': w['word'].strip(), 'start': w['start'], 'end': w['end']})
                 source_label = 'local-whisper'
             
-            elif provider == 'gpt-4o-audio':
+            elif provider in ('gpt-4o-transcribe', 'gpt-4o-mini-transcribe'):
                 from core.caption_generator import _transcribe_audio_gpt4o
-                # GPT-4o logic handles its own audio extraction/compression inside
-                # But here we need a source audio for it.
-                # For simplicity in utils, we extract it if not exists
+                # Models from the new Audio API
                 import subprocess
                 audio_path = os.path.join(job_dir, 'source_audio_temp.wav')
+                # Extract WAV as it is standard for transcription
                 subprocess.run(['ffmpeg', '-y', '-i', video_path, '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', audio_path], capture_output=True)
-                words = _transcribe_audio_gpt4o(audio_path)
-                source_label = 'gpt-4o-audio'
+                words = _transcribe_audio_gpt4o(audio_path, model_name=provider)
+                source_label = provider
                 if os.path.exists(audio_path): os.remove(audio_path)
 
         except Exception as e:

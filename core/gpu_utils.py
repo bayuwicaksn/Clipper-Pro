@@ -71,10 +71,10 @@ def get_ffmpeg_video_encode_args():
         print("[GPU] Selected encoder: h264_nvenc (NVIDIA Native)")
         return [
             '-c:v', 'h264_nvenc',
-            '-preset', 'p4',       # Fast NVENC preset
-            '-rc', 'vbr',          # Variable bitrate
-            '-cq', '23',           # Constant quality
-            '-b:v', '0',           # Let CQ control quality
+            '-preset', 'p4',          # Fast NVENC preset
+            '-rc:v', 'vbr',           # Variable bitrate (stream-specific)
+            '-cq:v', '23',            # Constant quality
+            '-b:v', '0',              # Let CQ control quality
         ]
 
     # 2. Windows Media Foundation fallback (GPU - installed by Conda on Windows)
@@ -82,7 +82,7 @@ def get_ffmpeg_video_encode_args():
         print("[GPU] Selected encoder: h264_mf (Windows Media Foundation)")
         return [
             '-c:v', 'h264_mf',
-            '-b:v', '5M',          # Bitrate for 1080p
+            '-b:v', '8M',             # Constant Bitrate for 1080p (MF is safer with CBR)
         ]
 
     # 3. AMD AMF fallback (GPU)
@@ -91,6 +91,7 @@ def get_ffmpeg_video_encode_args():
         return [
             '-c:v', 'h264_amf',
             '-quality', 'balanced',
+            '-rc', 'vbr_peak',        # AMF specific VBR
         ]
 
     # 4. Standard CPU encoder (x264)

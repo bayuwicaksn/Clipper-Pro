@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import './EditorNLE.css'; // We will create this for NLE grid specifically
 import Timeline from './Timeline';
 import Sidebar from './Sidebar';
-import Preview from './Preview';
+import Preview from './CustomPreview';
 import {
   ChevronLeft, Save, Download,
   RotateCcw, Scissors,
@@ -25,7 +25,7 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
   const [activeSegmentIndex, setActiveSegmentIndex] = useState(0);
   const [activeTab, setActiveTab] = useState('captions');
 
-  // Caption Settings (Optimized for Remotion)
+  // Caption Settings
   const [captionSettings, setCaptionSettings] = useState({
     presetId: 'default',
     fontName: 'Montserrat',
@@ -48,7 +48,7 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
     lineLimit: 2,
     captionX: 0.5,   // 0-1 normalized horizontal (0.5 = centered)
     captionY: 0.82,  // 0-1 normalized vertical (0.82 = near bottom)
-    verticalMargin: 150 
+    verticalMargin: 150
   });
 
   const apiBase = `http://${window.location.hostname}:5000`;
@@ -81,8 +81,9 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
   } : segments[activeSegmentIndex];
 
   const [currentTime, setCurrentTime] = useState(0); // Tracks current video playhead
-  const [seekRequested, setSeekRequested] = useState(undefined); // Used to trigger seeks in Preview
+  const [seekRequested, setSeekRequested] = useState(null); // { time, signal: Date.now() }
   const [isPlaying, setIsPlaying] = useState(false); // Controls playback
+  const [aspectRatio, setAspectRatio] = useState('9:16'); // '9:16' or '16:9'
   const [isProcessing, setIsProcessing] = useState(false); // Loading state
   const [statusMessage, setStatusMessage] = useState(''); // Text to show in overlay
   const [exportProgress, setExportProgress] = useState(0); // Export percentage
@@ -114,6 +115,15 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
         .catch(err => console.error("Could not fetch clips", err));
     }
   }, [project, apiBase]);
+
+  // Jump to clip start when activeClipIndex changes in clipper mode
+  React.useEffect(() => {
+    if (appMode === 'clipper' && activeClip) {
+      const start = timestampToSeconds(activeClip.start_time);
+      setSeekRequested(start);
+      setCurrentTime(start);
+    }
+  }, [activeClipIndex, appMode]); // Only run when clip index or mode changes
 
   // Caption Presets
   const [presets, setPresets] = useState([]);
@@ -512,7 +522,8 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
           clip_index: activeClipIndex,
           segments: segments, // Passing the full array of split segments
           caption_settings: captionSettings,
-          transcript: transcript // Send current transcript to skip re-transcription
+          transcript: transcript, // Send current transcript to skip re-transcription
+          aspect_ratio: aspectRatio
         })
       });
       const data = await res.json();
@@ -649,6 +660,27 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Aspect Ratio Selector */}
+          <div className="flex items-center bg-white/5 rounded-lg p-1 border border-white/10">
+            <button
+              onClick={() => setAspectRatio('9:16')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${aspectRatio === '9:16'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-foreground/40 hover:text-foreground/70'
+                }`}
+            >
+              9:16
+            </button>
+            <button
+              onClick={() => setAspectRatio('16:9')}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${aspectRatio === '16:9'
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : 'text-foreground/40 hover:text-foreground/70'
+                }`}
+            >
+              16:9
+            </button>
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -686,7 +718,7 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
 
         {/* CENTER: PREVIEW AREA */}
         <div className="nle-center-panel flex-1 bg-background relative flex flex-col overflow-hidden">
-          <div className="flex-1 relative w-full overflow-hidden flex items-center justify-center">
+          <div className="flex-1 relative w-full overflow-hidden flex items-center justify-center min-h-0">
             {activeClip && activeSegment && project?.id && (
               <>
                 <Preview
@@ -694,7 +726,8 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
                   setPlayerReady={setIsPlayerReady}
                   appMode={appMode}
                   jobId={project.id}
-                  startSecs={activeSegment.start}
+                  aspectRatio={aspectRatio}
+                  startSecs={appMode === 'clipper' ? 0 : activeSegment.start}
                   endSecs={activeSegment.end}
                   currentTime={currentTime}
                   cropX={activeSegment.crop_x || 0.5}

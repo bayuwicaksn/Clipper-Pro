@@ -118,8 +118,8 @@ export default function Timeline({
   const totalDuration = Math.max(0.1, endTime - startTime);
 
   // 2. Decide which time to use for display
-  // If playing, use the high-performance player frame. If not, use the prop.
-  const activeSegStart = segments[activeSegmentIndex]?.start ?? startTime;
+  // playerFrame is relative to activeSegStart
+  const activeSegStart = appMode === 'clipper' ? (segments[0]?.start || 0) : (segments[activeSegmentIndex]?.start ?? startTime);
   const currentTime = isPlaying
     ? (playerFrame / 30) + activeSegStart
     : propCurrentTime;
@@ -454,7 +454,7 @@ export default function Timeline({
                 const widthPct = ((safeEnd - safeStart) / totalDuration) * 100;
                 const leftPct = ((safeStart - startTime) / totalDuration) * 100;
                 const active = idx === activeSegmentIndex;
-                
+
                 // Calculate exactly how many 42px thumbnails fit in the segment's physical width
                 const segmentWidthPx = (widthPct / 100) * trackWidth;
                 const segmentFrameCount = Math.max(1, Math.round(segmentWidthPx / 42));
@@ -492,6 +492,9 @@ export default function Timeline({
                         onMouseDown={(event) => {
                           event.stopPropagation();
                           if (setActiveSegmentIndex) setActiveSegmentIndex(idx);
+
+                          // Seek to the start of the selected segment
+                          if (onSeek) onSeek(seg.start);
 
                           if (active) {
                             startHandleDrag(event, idx, "move");

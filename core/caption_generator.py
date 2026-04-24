@@ -230,6 +230,50 @@ def _transcribe_audio(audio_path: str) -> list:
     return words
 
 
+def _transcribe_audio_gpt4o(audio_path: str, model_name: str = "gpt-4o-transcribe") -> list:
+    """
+    Transcribe audio using the new OpenAI Transcriptions API models.
+    Supports: gpt-4o-transcribe, gpt-4o-mini-transcribe, etc.
+    """
+    from openai import OpenAI
+    logger.info(f"[Caption] Transcribing with OpenAI API (Model: {model_name})...")
+    client = OpenAI()
+
+    try:
+        # According to the provided documentation, we use the transcriptions endpoint
+        # with timestamp_granularities=['word'] to get word-level timing.
+        with open(audio_path, 'rb') as audio_file:
+            transcription = client.audio.transcriptions.create(
+                model=model_name,
+                file=audio_file,
+                response_format='verbose_json',
+                timestamp_granularities=['word']
+            )
+
+        words = []
+        raw_words = getattr(transcription, 'words', None) or []
+        for w in raw_words:
+            text  = w.word  if hasattr(w, 'word')  else w.get('word', '')
+            start = w.start if hasattr(w, 'start') else w.get('start', 0)
+            end   = w.end   if hasattr(w, 'end')   else w.get('end', 0)
+            if text.strip():
+                words.append({'word': text.strip(), 'start': start, 'end': end})
+
+        if not words and hasattr(transcription, 'text'):
+            logger.warning(f"[Caption] Model {model_name} returned text but no word timestamps. Estimating...")
+            # Fallback for models that might not support word timestamps yet but return text
+            full_text = transcription.text
+            # Simple estimation logic if needed, but better to log it
+            logger.info(f"[Caption] Full text: {full_text[:100]}...")
+
+        logger.info(f"[Caption] {model_name} returned {len(words)} words.")
+        return words
+
+    except Exception as e:
+        logger.error(f"[Caption] {model_name} API call failed: {e}. Falling back to Whisper...")
+        return _transcribe_audio(audio_path)
+
+
 def _get_clip_duration(video_path: str) -> float:
     """Get video duration in seconds via ffprobe."""
     try:

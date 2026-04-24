@@ -85,18 +85,25 @@ def get_face_center_x(clip_path, timestamp_sec):
     cap.release()
     return 0.5
 
-def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None, clip_index=0, total_clips=1, custom_crop_x=None, segments=None):
+def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None, clip_index=0, total_clips=1, custom_crop_x=None, segments=None, aspect_ratio='9:16'):
     """
-    Convert a 16:9 clip to 9:16 portrait with face tracking.
+    Convert a 16:9 clip to a target aspect ratio with face tracking.
     """
+    # Parse target aspect ratio
+    try:
+        parts = [float(x) for x in aspect_ratio.split(':')]
+        target_ratio = parts[0] / parts[1]
+    except Exception:
+        target_ratio = 9/16  # Default fallback
+        
     if segments:
-        crop_positions = _track_with_segments(clip_path, segments)
+        crop_positions = _track_with_segments(clip_path, segments, target_ratio)
     elif custom_crop_x is not None:
-        crop_positions = _track_with_override(clip_path, custom_crop_x)
+        crop_positions = _track_with_override(clip_path, custom_crop_x, target_ratio)
     elif mode == 'mediapipe' or mode == 'yolo':
-        crop_positions = _track_with_mediapipe(clip_path)
+        crop_positions = _track_with_mediapipe(clip_path, target_ratio)
     else:
-        crop_positions = _track_with_opencv(clip_path)
+        crop_positions = _track_with_opencv(clip_path, target_ratio)
 
     if progress_callback:
         base = 40 + int((clip_index / total_clips) * 10)
@@ -104,10 +111,10 @@ def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None, 
     else:
         base = 40
 
-    _apply_crop(clip_path, output_path, crop_positions, progress_callback, base)
+    _apply_crop(clip_path, output_path, crop_positions, target_ratio, progress_callback, base)
 
 
-def _track_with_override(clip_path, custom_crop_x_pct):
+def _track_with_override(clip_path, custom_crop_x_pct, target_ratio):
     """Static framing using a user-provided percentage override (0.0 to 1.0)"""
     cap = cv2.VideoCapture(clip_path)
     if not cap.isOpened(): return []
@@ -116,21 +123,11 @@ def _track_with_override(clip_path, custom_crop_x_pct):
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     
-    crop_w = int(height * 9 / 16)
+    crop_w = int(height * target_ratio)
     
-    # Calculate the literal safe bounds for 'left' 
-    # e.g., pct = 0.5 center, pct = 0.0 flush left
-    
-    thumb_width = width # the theoretical width in the UI
-    
-    # If the user drags the frame such that center X = pct
-    # we need to ensure the crop box doesn't go out of bounds.
-    # Actually `custom_crop_x_pct` defines the CENTER of the frame in the UI relative to thumbWidth.
-    # The left edge in pixels would be: center_x_px - (crop_w / 2)
     center_x = width * custom_crop_x_pct
     crop_x = int(center_x - (crop_w / 2))
     
-    # Clamp bounds, allowing negative if crop_w > width
     if crop_w > width:
         crop_x = (width - crop_w) // 2
     else:
@@ -144,7 +141,7 @@ def _track_with_override(clip_path, custom_crop_x_pct):
     return positions
 
 
-def _track_with_opencv(clip_path):
+def _track_with_opencv(clip_path, target_ratio):
     """Fallback static tracking using OpenCV's Haar Cascade (Zero Movement)."""
     cap = cv2.VideoCapture(clip_path)
     if not cap.isOpened(): return []
@@ -169,7 +166,7 @@ def _track_with_opencv(clip_path):
     
     # 2. Apply static lock
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    crop_w = int(height * 9 / 16)
+    crop_w = int(height * target_ratio)
     if crop_w > width:
         crop_x = (width - crop_w) // 2
     else:
@@ -183,7 +180,7 @@ def _track_with_opencv(clip_path):
     return positions
 
 
-def _track_with_segments(clip_path, segments):
+def _track_with_segments(clip_path, segments, target_ratio):
     """
     Apply multiple crop positions over time based on segments.
     segments: list of {'start': seconds, 'end': seconds, 'crop_x': offset_pct, 'crop_y': offset_pct, 'crop_z': zoom}
@@ -228,7 +225,7 @@ def _track_with_segments(clip_path, segments):
         # Calculate zoomed dimensions
         # Base height is full source height.
         crop_h = int(height / zoom)
-        crop_w = int(crop_h * 9 / 16)
+        crop_w = int(crop_h * target_ratio)
         
         # Calculate origins based on center percentages
         center_x = width * active_seg['crop_x']
@@ -260,11 +257,10 @@ def _track_with_segments(clip_path, segments):
     return positions
 
 
-def _track_with_mediapipe(clip_path):
+def _track_with_mediapipe(clip_path, target_ratio):
     """
-    Reframes a 16:9 video to 9:16 portrait.
-    Uses MediaPipe FaceMesh to track multiple faces and focuses the camera
-    on the ACTIVE SPEAKER by analyzing lip movement (MAR).
+    Reframes a 16:9 video to a target aspect ratio.
+    Uses MediaPipe FaceMesh to track faces and locks center.
     """
     print(f"\n[Reframer] Starting Active Speaker tracking for: {os.path.basename(clip_path)}")
     
@@ -273,7 +269,7 @@ def _track_with_mediapipe(clip_path):
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
 
-    crop_w = int(height * 9 / 16)
+    crop_w = int(height * target_ratio)
     if crop_w > width:
         crop_w = width
 
@@ -344,7 +340,7 @@ def _track_with_mediapipe(clip_path):
     return positions
 
 
-def _apply_crop(clip_path, output_path, positions, progress_callback=None, base_pct=40):
+def _apply_crop(clip_path, output_path, positions, target_ratio, progress_callback=None, base_pct=40):
     """Apply crop positions using OpenCV for processing, GPU FFmpeg for encoding."""
     video_enc = get_ffmpeg_video_encode_args()
 
@@ -357,10 +353,19 @@ def _apply_crop(clip_path, output_path, positions, progress_callback=None, base_
     if not positions:
         print("[Reframer] No positions provided, using default center crop.")
         # Fallback: center crop with FFmpeg
+        crop_w = int(height * target_ratio)
+        crop_x = (width - crop_w) // 2
+        
+        # Calculate target resolution
+        if target_ratio < 1: # Portrait-ish
+            out_w, out_h = 1080, int(1080 / target_ratio)
+        else: # Landscape-ish
+            out_w, out_h = 1920, int(1920 / target_ratio)
+            
         cmd = [
             'ffmpeg', '-y',
             '-i', clip_path,
-            '-vf', 'crop=ih*9/16:ih:(iw-ih*9/16)/2:0,scale=1080:1920',
+            '-vf', f'crop={crop_w}:{height}:{crop_x}:0,scale={out_w}:{out_h}',
         ] + video_enc + [
             '-c:a', 'aac', '-b:a', '128k',
             '-movflags', '+faststart',
@@ -370,7 +375,12 @@ def _apply_crop(clip_path, output_path, positions, progress_callback=None, base_
         return
 
     # Final output resolution
-    out_w, out_h = 1080, 1920
+    if target_ratio < 1: # Portrait
+        out_w, out_h = 1080, 1920
+    elif target_ratio > 1: # Landscape
+        out_w, out_h = 1920, 1080
+    else: # Square
+        out_w, out_h = 1080, 1080
     
     # Start FFmpeg process
     # We pipe the RESIZED frame to FFmpeg because zoom means frame sizes vary per segment.
@@ -408,13 +418,13 @@ def _apply_crop(clip_path, output_path, positions, progress_callback=None, base_
             pos = positions[frame_idx]
             crop_x = pos.get('x', 0)
             crop_y = pos.get('y', 0)
-            cw = pos.get('w', int(height * 9/16))
+            cw = pos.get('w', int(height * target_ratio))
             ch = pos.get('h', height)
         else:
             pos = positions[-1]
             crop_x = pos.get('x', 0)
             crop_y = pos.get('y', 0)
-            cw = pos.get('w', int(height * 9/16))
+            cw = pos.get('w', int(height * target_ratio))
             ch = pos.get('h', height)
 
         # Dynamic crop based on x, y, w, h

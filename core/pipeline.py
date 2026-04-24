@@ -150,7 +150,7 @@ class Pipeline:
 
         return clips_result
 
-    def export_single_clip(self, clip_metadata, custom_start=None, custom_end=None, custom_crop_x=None, segments=None, clip_index=None):
+    def export_single_clip(self, clip_metadata, custom_start=None, custom_end=None, custom_crop_x=None, segments=None, clip_index=None, aspect_ratio='9:16'):
         """Run the actual rendering pipeline for a single tweaked clip."""
         segments_dir = None
         try:
@@ -189,7 +189,8 @@ class Pipeline:
             raw_clip_path = raw_clips[0]
             
             final_data = self._process_single_clip(
-                raw_clip_path, clip_metadata, idx, 1
+                raw_clip_path, clip_metadata, idx, 1,
+                aspect_ratio=aspect_ratio
             )
             
             # Cleanup temporary segments directory
@@ -215,7 +216,7 @@ class Pipeline:
             self.progress('error', f'Export failed: {str(e)}', 0)
             raise
 
-    def _process_single_clip(self, raw_clip_path, highlight, index, total):
+    def _process_single_clip(self, raw_clip_path, highlight, index, total, aspect_ratio='9:16'):
         """Process a single clip through reframe → captions → hook (all FFmpeg-native)."""
         clip_dir = self._clip_dir(index)
         exports_dir = os.path.join(clip_dir, 'exports')
@@ -238,7 +239,8 @@ class Pipeline:
             progress_callback=self.progress,
             clip_index=index, total_clips=total,
             custom_crop_x=custom_crop_x,
-            segments=segments
+            segments=segments,
+            aspect_ratio=aspect_ratio
         )
 
         if os.path.exists(reframed_path) and os.path.getsize(reframed_path) > 0:

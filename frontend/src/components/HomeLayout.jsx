@@ -343,7 +343,8 @@ export default function HomeLayout({
                       onChange={(e) => setTranscriptionProvider(e.target.value)}
                     >
                       <option value="openai-whisper">OpenAI Whisper (Fast API)</option>
-                      <option value="gpt-4o-audio">GPT-4o Audio (Multimodal - Experimental)</option>
+                      <option value="gpt-4o-transcribe">GPT-4o Audio (Pro Transcribe)</option>
+                      <option value="gpt-4o-mini-transcribe">GPT-4o Mini (Fast Transcribe)</option>
                       <option value="local-whisper">Local Whisper (Slow/Private)</option>
                     </select>
                   </div>
