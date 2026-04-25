@@ -293,7 +293,6 @@ const CustomPreview = ({
             src={videoSrc}
             className="w-full h-full object-contain pointer-events-none"
             playsInline
-            muted
             crossOrigin="anonymous"
             onCanPlay={handleVideoCanPlay}
             onLoadedMetadata={(e) => {
