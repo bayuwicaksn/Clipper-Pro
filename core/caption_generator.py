@@ -106,30 +106,37 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
     
     # 1. Extract settings
     font_name      = settings.get('fontName', 'Montserrat')
-    font_size      = settings.get('fontSize', 32)
+    font_size      = settings.get('fontSize', 42) # Baseline standard UI
     primary_color  = _hex_to_ass(settings.get('primaryColor', '#FFFFFF'))
     outline_color  = _hex_to_ass(settings.get('outlineColor', '#000000'))
     outline_width  = settings.get('outlineWidth', 8)
     shadow_enabled = settings.get('shadowEnabled', True)
     shadow_color   = _hex_to_ass(settings.get('shadowColor', '#000000'))
     is_uppercase   = settings.get('isUppercase', True)
-    y_pos_ratio    = settings.get('captionY', 0.8)
-    max_width_pct  = settings.get('captionWidth', 100) / 100.0
     
-    # Scaling factor for font (ASS uses different coordinate space than CSS)
-    # We calibrate based on 1080p target
-    font_scale = video_h / 600.0 
-    scaled_font_size = font_size * font_scale
-    scaled_outline = outline_width * (video_h / 1080.0)
+    # --- FIX: SINKRONISASI POSISI & LEBAR DENGAN UI ---
+    x_pos_ratio    = settings.get('captionX', 0.5)
+    y_pos_ratio    = settings.get('captionY', 0.8)
+    max_width_pct  = settings.get('captionWidth', 85) / 100.0
+    
+    # Scaling factor (Baseline 1080p untuk menyesuaikan CSS font-size)
+    font_scale = video_h / 1080.0 
+    scaled_font_size = int(font_size * font_scale)
+    scaled_outline = int(outline_width * font_scale)
+
+    # Titik jangkar absolut (Center-Center) menyesuaikan CSS translate(-50%, -50%)
+    pos_x = int(video_w * x_pos_ratio)
+    pos_y = int(video_h * y_pos_ratio)
+
+    # Kalkulasi dinamis karakter per baris berdasarkan font size dan lebar container
+    max_pixel_width = video_w * max_width_pct
+    avg_char_width = scaled_font_size * 0.55 # Estimasi lebar karakter font sans-serif
+    chars_per_line = max(10, int(max_pixel_width / avg_char_width))
 
     # 2. Build Chunks (Word groups for line wrapping)
-    # This logic mirrors the frontend wrapping
     chunks = []
     current_chunk = []
-    
-    # Simple line-length based chunking (can be improved)
-    chars_per_line = 25 
-    max_chars = chars_per_line * 2 # 2 lines
+    max_chars = chars_per_line * 2 # Maksimal 2 baris
     
     current_len = 0
     for w in words:
@@ -154,7 +161,8 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        f"Style: Default,{font_name},{scaled_font_size},{primary_color},&H0000FFFF,{outline_color},{shadow_color},-1,0,0,0,100,100,0,0,1,{scaled_outline},{2 if shadow_enabled else 0},2,10,10,{int(video_h * (1 - y_pos_ratio))},1",
+        # FIX: Alignment=5 (Mid-Center) menghilangkan efek MarginV, koordinat dikendalikan oleh \pos
+        f"Style: Default,{font_name},{scaled_font_size},{primary_color},&H0000FFFF,{outline_color},{shadow_color},-1,0,0,0,100,100,0,0,1,{scaled_outline},{2 if shadow_enabled else 0},5,0,0,0,1",
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
@@ -166,26 +174,15 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
         chunk_start = _to_ass_time(chunk[0]['start'])
         chunk_end = _to_ass_time(chunk[-1]['end'])
         
-        # Base text for the entire chunk
-        full_text_list = []
-        for w in chunk:
-            full_text_list.append(w['word'].upper() if is_uppercase else w['word'])
-        
-        # For each word in the chunk, create a timed event where that word is highlighted
         for i, target_word in enumerate(chunk):
             start_t = _to_ass_time(target_word['start'])
             end_t = _to_ass_time(target_word['end'])
-            
-            # If there's a gap between words, we might need a "dimmed" state event, 
-            # but for simplicity, we just span the highlighted word.
             
             highlighted_text = ""
             for j, w in enumerate(chunk):
                 word_txt = w['word'].upper() if is_uppercase else w['word']
                 if i == j:
-                    # Highlight color (Yellowish default or from settings)
-                    # For now, let's use a bright yellow highlight like Pycaps
-                    highlight_tag = "{\\c&H00FFFF&}" # Yellow in BGR (&HBBGGRR)
+                    highlight_tag = "{\\c&H00FFFF&}" # Yellow BGR
                     highlighted_text += f"{highlight_tag}{word_txt}{{\\c{primary_color}}}"
                 else:
                     highlighted_text += word_txt
@@ -193,9 +190,9 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
                 if j < len(chunk) - 1:
                     highlighted_text += " "
             
-            events.append(f"Dialogue: 0,{start_t},{end_t},Default,,0,0,0,,{highlighted_text}")
+            # FIX: Injeksi tag \pos(x,y) di awal teks dialog agar mengikuti koordinat UI Drag
+            events.append(f"Dialogue: 0,{start_t},{end_t},Default,,0,0,0,,{{\\pos({pos_x},{pos_y})}}{highlighted_text}")
 
-    # Write to file
     with open(ass_path, 'w', encoding='utf-8') as f:
         f.write("\n".join(header + events))
 
