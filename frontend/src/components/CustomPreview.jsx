@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Minus, Plus } from 'lucide-react';
 import { CustomCaptions } from './CustomCaptions';
 
 /**
@@ -31,10 +32,25 @@ const CustomPreview = ({
   const videoRef = useRef(null);
   const captionOverlayRef = useRef(null);
   const aspectRatioBoxRef = useRef(null);
+  const scrollAreaRef = useRef(null);
   const listenersRef = useRef({ frameupdate: new Set() });
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
+  const [viewZoom, setViewZoom] = useState(1.0); // 1.0 = Fit
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const [isCanvasPanning, setIsCanvasPanning] = useState(false);
+  const [activeElement, setActiveElement] = useState(null); // null | 'video' | 'caption'
+  const canvasPanStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  
+  const handleZoomChange = useCallback((newZoom) => {
+    setViewZoom(newZoom);
+    if (newZoom === 1.0) {
+      setPanX(0);
+      setPanY(0);
+    }
+  }, []);
 
   const videoSrc = `${window.location.protocol}//${window.location.hostname}:5000/api/preview_source/${jobId}`;
 
@@ -51,6 +67,23 @@ const CustomPreview = ({
       initialY: cropY || 0.5
     });
   }, [cropX, cropY]);
+
+  const startCanvasPan = useCallback((e) => {
+    // Don't pan if clicking interactive elements
+    if (e.target.closest('[data-no-canvas-pan]')) return;
+    
+    setActiveElement(null); // Deselect on canvas click
+    setIsCanvasPanning(true);
+    canvasPanStart.current = { x: e.clientX, y: e.clientY, panX, panY };
+  }, [panX, panY]);
+
+  const handleCanvasDoubleClick = useCallback((e) => {
+    // Don't reset if double click on interactive elements
+    if (e.target.closest('[data-no-canvas-pan]')) return;
+    handleZoomChange(1.0); // Reset zoom to Fit
+    setPanX(0);            // Center pan
+    setPanY(0);
+  }, [handleZoomChange]);
 
   const startResize = useCallback((e, handle) => {
     e.preventDefault();
@@ -96,9 +129,10 @@ const CustomPreview = ({
   }, [appMode, captionSettings]);
 
   useEffect(() => {
-    if (!dragState) {
+    if (!dragState && !isCanvasPanning) {
       setIsSnappedX(false);
       setIsSnappedY(false);
+      setIsSnappedCaptionX(false);
       return;
     }
 
@@ -109,8 +143,10 @@ const CustomPreview = ({
       
       rafId = requestAnimationFrame(() => {
         rafId = null;
-        const dx = e.clientX - dragState.startX;
-        const dy = e.clientY - dragState.startY;
+
+        if (dragState) {
+          const dx = e.clientX - dragState.startX;
+          const dy = e.clientY - dragState.startY;
 
         if (dragState.type === 'pan') {
           const container = videoRef.current?.parentElement;
@@ -221,11 +257,16 @@ const CustomPreview = ({
             captionWidth: Math.round(newWidth)
           }));
         }
+      } else if (isCanvasPanning) {
+        setPanX(canvasPanStart.current.panX + (e.clientX - canvasPanStart.current.x));
+        setPanY(canvasPanStart.current.panY + (e.clientY - canvasPanStart.current.y));
+        }
       });
     };
 
     const handleMouseUp = () => {
       setDragState(null);
+      setIsCanvasPanning(false);
       setIsSnappedCaptionX(false);
     };
 
@@ -235,7 +276,7 @@ const CustomPreview = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, cropZ, setCropX, setCropY, setCropZ]);
+  }, [dragState, isCanvasPanning, cropZ, setCropX, setCropY, setCropZ, setCaptionSettings, videoAspectRatio]);
 
   // Expose methods to the parent via playerRef
   useEffect(() => {
@@ -345,10 +386,64 @@ const CustomPreview = ({
     : 'none';
 
   return (
-    <div className="w-full h-full flex items-center justify-center bg-black rounded-xl overflow-hidden shadow-2xl relative">
+    <div className="nle-player-container relative w-full h-full bg-[#1a1a1a] rounded-xl overflow-hidden group shadow-2xl">
+      {/* Zoom Controls Overlay - FIXED (Outside scroll area) */}
+      <div className="absolute bottom-6 right-6 z-[100] flex items-center gap-1 bg-[#121212]/90 backdrop-blur-md border border-white/10 p-1.5 rounded-full shadow-2xl pointer-events-auto transition-opacity opacity-0 group-hover:opacity-100">
+        <button 
+          onClick={() => handleZoomChange(Math.max(0.25, viewZoom - 0.25))}
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+          title="Zoom Out"
+        >
+          <Minus size={16} />
+        </button>
+        
+        <div className="h-4 w-[1px] bg-white/10 mx-1" />
+        
+        <button
+          onClick={() => handleZoomChange(1.0)}
+          className={`px-3 py-1 text-[11px] font-medium rounded-full transition-all ${
+            viewZoom === 1.0 
+              ? 'bg-blue-600 text-white' 
+              : 'text-white/50 hover:text-white hover:bg-white/5'
+          }`}
+        >
+          Fit
+        </button>
 
-      <div className="w-full h-full relative flex items-center justify-center overflow-hidden">
+        <div className="px-3 py-1 text-[11px] font-medium text-white/70 min-w-[42px] text-center tabular-nums">
+          {Math.round(viewZoom * 100)}%
+        </div>
 
+        <div className="h-4 w-[1px] bg-white/10 mx-1" />
+
+        <button 
+          onClick={() => handleZoomChange(Math.min(4.0, viewZoom + 0.25))}
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 text-white/70 hover:text-white transition-colors"
+          title="Zoom In"
+        >
+          <Plus size={16} />
+        </button>
+      </div>
+
+      {/* CANVAS AREA - Figma-style Drag to Pan */}
+      <div 
+        ref={scrollAreaRef}
+        className={`w-full h-full overflow-hidden flex items-center justify-center p-8 scrollbar-none select-none ${isCanvasPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
+        onMouseDown={startCanvasPan}
+        onDoubleClick={handleCanvasDoubleClick}
+      >
+        <div 
+          className="relative flex items-center justify-center flex-shrink-0"
+          style={{ 
+            height: `${viewZoom * 100}%`,
+            aspectRatio: (aspectRatio === '9:16' || aspectRatio === '4:5' || aspectRatio === '1:1') 
+              ? aspectRatio.replace(':', '/') 
+              : '16/9',
+            minHeight: viewZoom === 1.0 ? '100%' : 'auto',
+            transform: `translate(${panX}px, ${panY}px)`,
+            transition: isCanvasPanning ? 'none' : 'transform 0.15s ease-out'
+          }}
+        >
         {/* PROPORTIONAL VIDEO WRAPPER */}
         <div
           style={{
@@ -363,11 +458,11 @@ const CustomPreview = ({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            // High visibility border in Editor Mode
-            outline: appMode === 'editor'
-              ? (dragState ? '4px solid #3b82f6' : '2px solid #3b82f6')
+            // High visibility border ONLY when active - Compensate for cropZ scale
+            outline: appMode === 'editor' && activeElement === 'video'
+              ? `${(dragState ? 2.5 : 1.5) / (cropZ || 1.0)}px solid #3b82f6`
               : 'none',
-            boxShadow: (appMode === 'editor' && dragState) ? '0 0 30px rgba(59, 130, 246, 0.6)' : 'none',
+            boxShadow: (appMode === 'editor' && activeElement === 'video' && dragState) ? '0 0 30px rgba(59, 130, 246, 0.6)' : 'none',
           }}
         >
           <video
@@ -387,25 +482,54 @@ const CustomPreview = ({
           {/* Interactive Handles (Inside the wrapper, so they track perfectly) */}
           {appMode === 'editor' && (
             <>
-              {/* Internal Panning Area */}
-              <div
-                className="absolute inset-0 cursor-move pointer-events-auto z-10"
-                onMouseDown={startPan}
-              />
+              {/* Selectable Overlay (when not active) */}
+              {activeElement !== 'video' && (
+                <div 
+                  className="absolute inset-0 z-20 pointer-events-auto cursor-pointer"
+                  onClick={() => setActiveElement('video')}
+                />
+              )}
 
-              {/* Corner Handles - Extremely high z-index and bright color */}
-              <div className="absolute -top-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-nw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={(e) => startResize(e, 'tl')} />
-              <div className="absolute -top-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-ne-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={(e) => startResize(e, 'tr')} />
-              <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-sw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={(e) => startResize(e, 'bl')} />
-              <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-se-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={(e) => startResize(e, 'br')} />
+              {/* Internal Panning Area & Corner Handles (only when active) */}
+              {activeElement === 'video' && (
+                <>
+                  <div
+                    data-no-canvas-pan
+                    className="absolute inset-0 cursor-move pointer-events-auto z-10"
+                    onMouseDown={(e) => { setActiveElement('video'); startPan(e); }}
+                  />
+
+                  {/* Corner Handles - Compensate scale to keep size consistent */}
+                  <div 
+                    data-no-canvas-pan 
+                    className="absolute -top-2 -left-2 w-4 h-4 bg-white border-[3px] border-[#3b82f6] rounded-full cursor-nw-resize pointer-events-auto shadow-2xl z-50 transition-transform hover:brightness-110" 
+                    style={{ transform: `scale(${1 / (cropZ || 1.0)})` }}
+                    onMouseDown={(e) => startResize(e, 'tl')} 
+                  />
+                  <div 
+                    data-no-canvas-pan 
+                    className="absolute -top-2 -right-2 w-4 h-4 bg-white border-[3px] border-[#3b82f6] rounded-full cursor-ne-resize pointer-events-auto shadow-2xl z-50 transition-transform hover:brightness-110" 
+                    style={{ transform: `scale(${1 / (cropZ || 1.0)})` }}
+                    onMouseDown={(e) => startResize(e, 'tr')} 
+                  />
+                  <div 
+                    data-no-canvas-pan 
+                    className="absolute -bottom-2 -left-2 w-4 h-4 bg-white border-[3px] border-[#3b82f6] rounded-full cursor-sw-resize pointer-events-auto shadow-2xl z-50 transition-transform hover:brightness-110" 
+                    style={{ transform: `scale(${1 / (cropZ || 1.0)})` }}
+                    onMouseDown={(e) => startResize(e, 'bl')} 
+                  />
+                  <div 
+                    data-no-canvas-pan 
+                    className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-[3px] border-[#3b82f6] rounded-full cursor-se-resize pointer-events-auto shadow-2xl z-50 transition-transform hover:brightness-110" 
+                    style={{ transform: `scale(${1 / (cropZ || 1.0)})` }}
+                    onMouseDown={(e) => startResize(e, 'br')} 
+                  />
+                </>
+              )}
             </>
           )}
         </div>
 
-        {/* Global Pan Area (Fallthrough for clicking outside the video) */}
-        {appMode === 'editor' && (
-          <div className="absolute inset-0 z-0 pointer-events-auto cursor-move" onMouseDown={startPan} />
-        )}
 
         {/* DYNAMIC SAFE AREA MASK & SMART SNAPPING */}
         {appMode === 'editor' && (
@@ -439,8 +563,8 @@ const CustomPreview = ({
           </div>
         )}
 
-        {/* Captions - Proportional to Video Frame */}
-        {transcript && transcript.length > 0 && (
+      {/* Captions - Proportional to Video Frame */}
+        {transcript && transcript.length > 0 && captionSettings?.presetId !== 'none' && (
           <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
             <div 
               ref={aspectRatioBoxRef}
@@ -455,6 +579,7 @@ const CustomPreview = ({
               {appMode === 'editor' && (
                 <div 
                   ref={captionOverlayRef}
+                  data-no-canvas-pan
                   className={`absolute group pointer-events-auto cursor-move ${dragState?.type?.startsWith('caption') ? 'z-[60]' : 'z-50'}`}
                   style={{
                     left: `${(captionSettings?.captionX ?? 0.5) * 100}%`,
@@ -462,21 +587,28 @@ const CustomPreview = ({
                     transform: "translate(-50%, -50%)",
                     width: `${captionSettings?.captionWidth ?? 100}%`,
                     height: `${(captionSettings?.fontSize ?? 32) * 2.5}px`, 
-                    // Match Video Outline Style
-                    outline: dragState?.type?.startsWith('caption') ? '4px solid #3b82f6' : '2px solid #3b82f6',
-                    boxShadow: dragState?.type?.startsWith('caption') ? '0 0 30px rgba(59, 130, 246, 0.6)' : 'none',
+                    // Dynamic Outline based on selection state
+                    outline: activeElement === 'caption'
+                      ? (dragState?.type?.startsWith('caption') ? '4px solid #3b82f6' : '2px solid #3b82f6')
+                      : 'none', 
+                    boxShadow: (activeElement === 'caption' && dragState?.type?.startsWith('caption')) ? '0 0 30px rgba(59, 130, 246, 0.6)' : 'none',
                     borderRadius: '4px',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     transition: dragState?.type?.startsWith('caption') ? 'none' : 'all 0.15s ease-out'
                   }}
-                  onMouseDown={startCaptionDrag}
+                  onMouseDown={(e) => { setActiveElement('caption'); startCaptionDrag(e); }}
                 >
-                  <div className="absolute -top-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-nw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
-                  <div className="absolute -top-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-ne-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
-                  <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-sw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
-                  <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-se-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
+                  {/* Handles only visible when active */}
+                  {activeElement === 'caption' && (
+                    <>
+                      <div data-no-canvas-pan className="absolute -top-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-nw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
+                      <div data-no-canvas-pan className="absolute -top-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-ne-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
+                      <div data-no-canvas-pan className="absolute -bottom-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-sw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
+                      <div data-no-canvas-pan className="absolute -bottom-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-se-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
+                    </>
+                  )}
 
                   {isSnappedCaptionX && (
                     <div className="absolute left-1/2 top-[-100vh] h-[200vh] w-[1.5px] bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)] -translate-x-1/2 z-0" />
@@ -484,18 +616,24 @@ const CustomPreview = ({
                 </div>
               )}
 
-              <CustomCaptions 
-                transcript={transcript} 
-                styleType="classic" 
-                settings={captionSettings} 
-                currentTimeMs={currentTimeMs} 
-              />
-            </div>
+            <CustomCaptions 
+              transcript={transcript} 
+              styleType="classic" 
+              settings={captionSettings} 
+              currentTimeMs={currentTimeMs} 
+            />
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
-  );
+
+    {/* Helper Tooltip Overlay */}
+    <div className="absolute bottom-6 left-6 z-[100] text-[10px] text-white/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+      Double click to reset view
+    </div>
+  </div>
+</div>
+);
 };
 
 export default CustomPreview;
