@@ -204,13 +204,20 @@ def _track_with_segments(clip_path, segments, target_ratio):
             'crop_y': seg.get('crop_y', 0.5),
             'crop_z': seg.get('crop_z', 1.0),
         })
-    
-    print(f"[Reframer] Segments (local): {local_segments}")
+
+    # --- FIX: SINKRONISASI BASE VIEWPORT ---
+    # Di UI, Zoom 1.0 menyesuaikan lebar (width) untuk video 16:9 di container 9:16
+    video_ratio = width / height
+    if video_ratio > target_ratio:
+        base_viewport_w = width
+        base_viewport_h = width / target_ratio
+    else:
+        base_viewport_h = height
+        base_viewport_w = height * target_ratio
 
     positions = []
     for i in range(total_frames):
         ts = i / fps
-        # Find active segment
         active_seg = None
         for seg in local_segments:
             if ts >= seg['start'] and ts <= seg['end']:
@@ -218,32 +225,21 @@ def _track_with_segments(clip_path, segments, target_ratio):
                 break
         
         if not active_seg:
-            active_seg = local_segments[-1]  # Fallback to last
+            active_seg = local_segments[-1]
             
         zoom = active_seg['crop_z']
         
-        # Calculate zoomed dimensions
-        # Base height is full source height.
-        crop_h = int(height / zoom)
-        crop_w = int(crop_h * target_ratio)
+        # 1. Hitung dimensi kamera aktual yang diproyeksikan
+        crop_w = int(base_viewport_w / zoom)
+        crop_h = int(base_viewport_h / zoom)
         
-        # Calculate origins based on center percentages
+        # 2. Titik tengah berdasarkan persentase UI
         center_x = width * active_seg['crop_x']
         center_y = height * active_seg['crop_y']
         
+        # 3. Titik potong X dan Y (DIBIARKAN BISA NEGATIF)
         crop_x = int(center_x - (crop_w / 2))
         crop_y = int(center_y - (crop_h / 2))
-        
-        # Clamp to video boundaries, but allow negative bounds if crop is larger than video
-        if crop_w > width:
-            crop_x = (width - crop_w) // 2
-        else:
-            crop_x = max(0, min(crop_x, width - crop_w))
-            
-        if crop_h > height:
-            crop_y = (height - crop_h) // 2
-        else:
-            crop_y = max(0, min(crop_y, height - crop_h))
         
         positions.append({
             'frame': i, 
