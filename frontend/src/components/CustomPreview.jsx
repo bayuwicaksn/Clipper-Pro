@@ -441,7 +441,10 @@ const CustomPreview = ({
               : '16/9',
             minHeight: viewZoom === 1.0 ? '100%' : 'auto',
             transform: `translate(${panX}px, ${panY}px)`,
-            transition: isCanvasPanning ? 'none' : 'transform 0.15s ease-out'
+            transition: isCanvasPanning ? 'none' : 'transform 0.15s ease-out',
+            border: '1px solid rgba(255,255,255,0.12)',
+            boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.6)',
+            backgroundColor: 'black'
           }}
         >
         {/* PROPORTIONAL VIDEO WRAPPER */}
