@@ -118,7 +118,7 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
         left: `${captionX * 100}%`,
         top: `${captionY * 100}%`,
         transform: "translate(-50%, -50%)",
-        width: '85%',
+        width: `${settings?.captionWidth ?? 85}%`,
         lineHeight: 1.0,
         textWrap: "balance",
         perspective: "1000px",

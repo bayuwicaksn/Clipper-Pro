@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import './EditorNLE.css'; 
+import './EditorNLE.css';
 import ClipperView from './ClipperView';
 import EditorView from './EditorView';
 import {
@@ -26,7 +26,7 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
   const [captionSettings, setCaptionSettings] = useState({
     presetId: 'default',
     fontName: 'Montserrat',
-    fontSize: 42,
+    fontSize: 32,
     primaryColor: '#FFFFFF',
     outlineColor: '#000000',
     outlineWidth: 8,
@@ -45,6 +45,7 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
     lineLimit: 2,
     captionX: 0.5,
     captionY: 0.82,
+    captionWidth: 100,
     verticalMargin: 150
   });
 
@@ -77,16 +78,16 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
     crop_z: 1.0
   } : segments[activeSegmentIndex];
 
-  const [currentTime, setCurrentTime] = useState(0); 
-  const [seekRequested, setSeekRequested] = useState(null); 
-  const [isPlaying, setIsPlaying] = useState(false); 
-  const [aspectRatio, setAspectRatio] = useState('9:16'); 
-  const [isProcessing, setIsProcessing] = useState(false); 
-  const [statusMessage, setStatusMessage] = useState(''); 
-  const [exportProgress, setExportProgress] = useState(0); 
+  const [currentTime, setCurrentTime] = useState(0);
+  const [seekRequested, setSeekRequested] = useState(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState('9:16');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [statusMessage, setStatusMessage] = useState('');
+  const [exportProgress, setExportProgress] = useState(0);
 
   // Save State
-  const [saveStatus, setSaveStatus] = useState('saved'); 
+  const [saveStatus, setSaveStatus] = useState('saved');
   const [lastSaved, setLastSaved] = useState(null);
   const [isLoadingSavedState, setIsLoadingSavedState] = useState(true);
 
@@ -509,7 +510,7 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
 
       {/* Main View Area */}
       {appMode === 'clipper' ? (
-        <ClipperView 
+        <ClipperView
           project={project}
           activeClip={activeClip}
           activeClipIndex={activeClipIndex}
@@ -527,7 +528,7 @@ export default function EditorLayout({ project, initialClipIndex = 0, onClose, n
           aspectRatio={aspectRatio}
         />
       ) : (
-        <EditorView 
+        <EditorView
           project={project}
           activeClip={activeClip}
           activeClipIndex={activeClipIndex}

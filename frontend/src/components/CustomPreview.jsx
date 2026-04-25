@@ -26,8 +26,11 @@ const CustomPreview = ({
   onSegmentEnd,
   transcript,
   captionSettings,
+  setCaptionSettings,
 }) => {
   const videoRef = useRef(null);
+  const captionOverlayRef = useRef(null);
+  const aspectRatioBoxRef = useRef(null);
   const listenersRef = useRef({ frameupdate: new Set() });
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
@@ -64,6 +67,33 @@ const CustomPreview = ({
   const [isSnappedX, setIsSnappedX] = useState(false);
   const [isSnappedY, setIsSnappedY] = useState(false);
   const [isSnappedZ, setIsSnappedZ] = useState(false);
+  const [isSnappedCaptionX, setIsSnappedCaptionX] = useState(false);
+
+  const startCaptionDrag = useCallback((e) => {
+    if (appMode !== 'editor') return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragState({
+      type: 'caption-pan',
+      startX: e.clientX,
+      startY: e.clientY,
+      initialX: captionSettings?.captionX ?? 0.5,
+      initialY: captionSettings?.captionY ?? 0.8
+    });
+  }, [appMode, captionSettings]);
+
+  const startCaptionResize = useCallback((e) => {
+    if (appMode !== 'editor') return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragState({
+      type: 'caption-resize',
+      startX: e.clientX,
+      startY: e.clientY,
+      initialSize: captionSettings?.fontSize ?? 42,
+      initialWidth: captionSettings?.captionWidth ?? 85
+    });
+  }, [appMode, captionSettings]);
 
   useEffect(() => {
     if (!dragState) {
@@ -72,79 +102,131 @@ const CustomPreview = ({
       return;
     }
 
+    let rafId = null;
+
     const handleMouseMove = (e) => {
-      const dx = e.clientX - dragState.startX;
-      const dy = e.clientY - dragState.startY;
+      if (rafId) return;
+      
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        const dx = e.clientX - dragState.startX;
+        const dy = e.clientY - dragState.startY;
 
-      if (dragState.type === 'pan') {
-        const container = videoRef.current?.parentElement;
-        if (!container) return;
+        if (dragState.type === 'pan') {
+          const container = videoRef.current?.parentElement;
+          if (!container) return;
 
-        const sensitivityX = 1 / (container.clientWidth * (cropZ || 1.0));
-        const sensitivityY = 1 / (container.clientHeight * (cropZ || 1.0));
+          const sensitivityX = 1 / (container.clientWidth * (cropZ || 1.0));
+          const sensitivityY = 1 / (container.clientHeight * (cropZ || 1.0));
 
-        let newX = dragState.initialX - dx * sensitivityX;
-        let newY = dragState.initialY - dy * sensitivityY;
+          let newX = dragState.initialX - dx * sensitivityX;
+          let newY = dragState.initialY - dy * sensitivityY;
 
-        // Snapping Logic (Center)
-        const snapThreshold = 0.015;
-        const snappedX = Math.abs(newX - 0.5) < snapThreshold;
-        const snappedY = Math.abs(newY - 0.5) < snapThreshold;
+          // Snapping Logic (Center)
+          const snapThreshold = 0.015;
+          const snappedX = Math.abs(newX - 0.5) < snapThreshold;
+          const snappedY = Math.abs(newY - 0.5) < snapThreshold;
 
-        if (snappedX) newX = 0.5;
-        if (snappedY) newY = 0.5;
+          if (snappedX) newX = 0.5;
+          if (snappedY) newY = 0.5;
 
-        setIsSnappedX(snappedX);
-        setIsSnappedY(snappedY);
+          setIsSnappedX(snappedX);
+          setIsSnappedY(snappedY);
 
-        setCropX(Math.max(0, Math.min(1, newX)));
-        setCropY(Math.max(0, Math.min(1, newY)));
-      } else if (dragState.type === 'resize') {
-        const sensitivity = 0.005;
-        const zoomDelta = (dragState.handle.includes('t') ? -dy : dy) * sensitivity;
-        let newZ = dragState.initialZ + zoomDelta;
+          setCropX(Math.max(0, Math.min(1, newX)));
+          setCropY(Math.max(0, Math.min(1, newY)));
+        } else if (dragState.type === 'resize') {
+          const sensitivity = 0.005;
+          const zoomDelta = (dragState.handle.includes('t') ? -dy : dy) * sensitivity;
+          let newZ = dragState.initialZ + zoomDelta;
 
-        // MULTI-RATIO SIZE SNAPPING
-        const container = videoRef.current?.parentElement;
-        if (container) {
-          const videoAR = videoAspectRatio || 16/9;
-          const W_p = container.clientWidth;
-          const H_p = container.clientHeight;
-          const W_dom = Math.min(W_p, H_p * videoAR);
-          const H_dom = Math.min(H_p, W_p / videoAR);
-          
-          const ratios = [
-            { name: '9:16', val: 9/16 },
-            { name: '4:5', val: 4/5 },
-            { name: '1:1', val: 1/1 },
-            { name: 'Fit', val: videoAR }
-          ];
-          
-          const snapPoints = [1.0];
-          ratios.forEach(r => {
-            const W_m = Math.min(W_p, H_p * r.val);
-            const H_m = Math.min(H_p, W_p / r.val);
-            snapPoints.push(W_m / W_dom, H_m / H_dom);
-          });
+          // MULTI-RATIO SIZE SNAPPING
+          const container = videoRef.current?.parentElement;
+          if (container) {
+            const videoAR = videoAspectRatio || 16/9;
+            const W_p = container.clientWidth;
+            const H_p = container.clientHeight;
+            const W_dom = Math.min(W_p, H_p * videoAR);
+            const H_dom = Math.min(H_p, W_p / videoAR);
+            
+            const ratios = [
+              { name: '9:16', val: 9/16 },
+              { name: '4:5', val: 4/5 },
+              { name: '1:1', val: 1/1 },
+              { name: 'Fit', val: videoAR }
+            ];
+            
+            const snapPoints = [1.0];
+            ratios.forEach(r => {
+              const W_m = Math.min(W_p, H_p * r.val);
+              const H_m = Math.min(H_p, W_p / r.val);
+              snapPoints.push(W_m / W_dom, H_m / H_dom);
+            });
 
-          const zSnapThreshold = 0.06; // Stronger magnetic feel
-          let snapped = false;
-          for (const pt of snapPoints) {
-            if (Math.abs(newZ - pt) < zSnapThreshold) {
-              newZ = pt;
-              snapped = true;
-              break;
+            const zSnapThreshold = 0.06; // Stronger magnetic feel
+            let snapped = false;
+            for (const pt of snapPoints) {
+              if (Math.abs(newZ - pt) < zSnapThreshold) {
+                newZ = pt;
+                snapped = true;
+                break;
+              }
             }
+            setIsSnappedZ(snapped);
           }
-          setIsSnappedZ(snapped);
-        }
 
-        setCropZ(Math.max(0.1, Math.min(10.0, newZ)));
-      }
+          setCropZ(Math.max(0.1, Math.min(10.0, newZ)));
+        } else if (dragState.type === 'caption-pan') {
+          const container = aspectRatioBoxRef.current;
+          if (!container) return;
+
+          const sensitivityX = 1 / container.clientWidth;
+          const sensitivityY = 1 / container.clientHeight;
+
+          const newX = dragState.initialX + dx * sensitivityX;
+          const newY = dragState.initialY + dy * sensitivityY;
+
+          // Caption snapping (Center X)
+          const snapThreshold = 0.015;
+          const snappedX = Math.abs(newX - 0.5) < snapThreshold;
+          const finalX = snappedX ? 0.5 : newX;
+          setIsSnappedCaptionX(snappedX);
+
+          // Direct DOM Update for zero-latency
+          if (captionOverlayRef.current) {
+            captionOverlayRef.current.style.left = `${finalX * 100}%`;
+            captionOverlayRef.current.style.top = `${newY * 100}%`;
+          }
+          
+          // Still push to state for sidebar sync (RAF throttled)
+          setCaptionSettings(prev => ({
+            ...prev,
+            captionX: finalX,
+            captionY: newY
+          }));
+        } else if (dragState.type === 'caption-resize') {
+          // Independent movement: dx for width, dy for font size
+          const wSensitivity = 0.2;
+          const fSensitivity = 0.5;
+          
+          const dw = dx * wSensitivity;
+          const df = -dy * fSensitivity;
+
+          const newWidth = Math.max(10, dragState.initialWidth + dw);
+          const newSize = Math.max(10, Math.min(300, dragState.initialSize + df));
+
+          setCaptionSettings(prev => ({
+            ...prev,
+            fontSize: Math.round(newSize),
+            captionWidth: Math.round(newWidth)
+          }));
+        }
+      });
     };
 
     const handleMouseUp = () => {
       setDragState(null);
+      setIsSnappedCaptionX(false);
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -357,11 +439,57 @@ const CustomPreview = ({
           </div>
         )}
 
-        {/* Captions */}
+        {/* Captions - Proportional to Video Frame */}
         {transcript && transcript.length > 0 && (
           <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
-            <div className="relative h-full" style={{ aspectRatio: aspectRatio === '9:16' ? '9/16' : '16/9' }}>
-              <CustomCaptions transcript={transcript} styleType="classic" settings={captionSettings} currentTimeMs={currentTimeMs} />
+            <div 
+              ref={aspectRatioBoxRef}
+              className="relative h-full overflow-visible pointer-events-none" 
+              style={{ 
+                aspectRatio: (aspectRatio === '9:16' || aspectRatio === '4:5' || aspectRatio === '1:1') 
+                  ? aspectRatio.replace(':', '/') 
+                  : '16/9' 
+              }}
+            >
+              {/* Interaction Overlay for Captions */}
+              {appMode === 'editor' && (
+                <div 
+                  ref={captionOverlayRef}
+                  className={`absolute group pointer-events-auto cursor-move ${dragState?.type?.startsWith('caption') ? 'z-[60]' : 'z-50'}`}
+                  style={{
+                    left: `${(captionSettings?.captionX ?? 0.5) * 100}%`,
+                    top: `${(captionSettings?.captionY ?? 0.8) * 100}%`,
+                    transform: "translate(-50%, -50%)",
+                    width: `${captionSettings?.captionWidth ?? 100}%`,
+                    height: `${(captionSettings?.fontSize ?? 32) * 2.5}px`, 
+                    // Match Video Outline Style
+                    outline: dragState?.type?.startsWith('caption') ? '4px solid #3b82f6' : '2px solid #3b82f6',
+                    boxShadow: dragState?.type?.startsWith('caption') ? '0 0 30px rgba(59, 130, 246, 0.6)' : 'none',
+                    borderRadius: '4px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: dragState?.type?.startsWith('caption') ? 'none' : 'all 0.15s ease-out'
+                  }}
+                  onMouseDown={startCaptionDrag}
+                >
+                  <div className="absolute -top-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-nw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
+                  <div className="absolute -top-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-ne-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
+                  <div className="absolute -bottom-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-sw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
+                  <div className="absolute -bottom-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-se-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
+
+                  {isSnappedCaptionX && (
+                    <div className="absolute left-1/2 top-[-100vh] h-[200vh] w-[1.5px] bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,0.6)] -translate-x-1/2 z-0" />
+                  )}
+                </div>
+              )}
+
+              <CustomCaptions 
+                transcript={transcript} 
+                styleType="classic" 
+                settings={captionSettings} 
+                currentTimeMs={currentTimeMs} 
+              />
             </div>
           </div>
         )}
