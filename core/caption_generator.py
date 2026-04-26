@@ -102,56 +102,89 @@ def generate_captions(
 # ── ASS Generation Logic ──────────────────────────────────────────
 
 def _generate_ass_file(words, settings, ass_path, video_w, video_h):
-    """Generates an Advanced Substation Alpha (.ass) file with word-focus styling."""
-    
-    # 1. Extract settings
+    """
+    Generates an Advanced Substation Alpha (.ass) file with dynamic word-by-word
+    animations, auto-highlighting, and styling that matches the React frontend.
+    """
+    # 1. Extract settings with defaults
     font_name      = settings.get('fontName', 'Montserrat')
-    font_size      = settings.get('fontSize', 42) # Baseline standard UI
+    font_size      = settings.get('fontSize', 100)
+    
+    # Ensure directory exists
+    os.makedirs(os.path.dirname(ass_path), exist_ok=True)
+    logger.info(f"[Caption] Generating ASS file at: {ass_path}")
     primary_color  = _hex_to_ass(settings.get('primaryColor', '#FFFFFF'))
     outline_color  = _hex_to_ass(settings.get('outlineColor', '#000000'))
     outline_width  = settings.get('outlineWidth', 8)
+    
+    # Highlight Colors
+    highlight_green  = _hex_to_ass(settings.get('highlightColorGreen', '#04f827'))
+    highlight_yellow = _hex_to_ass(settings.get('highlightColorYellow', '#fffd03'))
+    
+    # Font Style & Weight
+    font_weight    = settings.get('fontWeight', 'Black')
+    is_italic      = 1 if settings.get('isItalic', False) else 0
+    is_underline   = 1 if settings.get('isUnderline', False) else 0
+    is_uppercase   = settings.get('isUppercase', True)
+    bold_flag      = -1 if font_weight in ['Black', 'Bold', 'Heavy'] else 0
+    
+    # Shadow & Glow
     shadow_enabled = settings.get('shadowEnabled', True)
     shadow_color   = _hex_to_ass(settings.get('shadowColor', '#000000'))
-    is_uppercase   = settings.get('isUppercase', True)
+    shadow_x       = settings.get('shadowOffsetX', 2)
+    shadow_y       = settings.get('shadowOffsetY', 2)
+    shadow_blur    = settings.get('shadowBlur', 2)
     
-    # --- FIX: SINKRONISASI POSISI & LEBAR DENGAN UI ---
+    # Position & Layout
     x_pos_ratio    = settings.get('captionX', 0.5)
-    y_pos_ratio    = settings.get('captionY', 0.8)
+    y_pos_ratio    = settings.get('captionY', 0.82)
     max_width_pct  = settings.get('captionWidth', 85) / 100.0
-    
-    # Scaling factor (Baseline 1080p untuk menyesuaikan CSS font-size)
+    line_limit     = settings.get('lineLimit', 2)
+    style_type     = settings.get('styleType', 'classic').lower()
+    auto_highlight = settings.get('autoHighlight', True)
+
+    # Global Scaling based on 1080p reference
     font_scale = video_h / 1080.0 
     scaled_font_size = int(font_size * font_scale)
-    scaled_outline = int(outline_width * font_scale)
-
-    # Titik jangkar absolut (Center-Center) menyesuaikan CSS translate(-50%, -50%)
+    scaled_outline   = (font_size * outline_width) / 1000.0 * font_scale
+    
     pos_x = int(video_w * x_pos_ratio)
     pos_y = int(video_h * y_pos_ratio)
 
-    # Kalkulasi dinamis karakter per baris berdasarkan font size dan lebar container
-    max_pixel_width = video_w * max_width_pct
-    avg_char_width = scaled_font_size * 0.55 # Estimasi lebar karakter font sans-serif
-    chars_per_line = max(10, int(max_pixel_width / avg_char_width))
-
-    # 2. Build Chunks (Word groups for line wrapping)
+    # Word Chunking Logic
+    max_chars = 12 if line_limit == 1 else (40 if line_limit == 3 else 25)
     chunks = []
     current_chunk = []
-    max_chars = chars_per_line * 2 # Maksimal 2 baris
-    
     current_len = 0
+    
     for w in words:
-        txt = w['word'].upper() if is_uppercase else w['word']
-        if current_len + len(txt) > max_chars and current_chunk:
+        txt = w['word'].strip()
+        if not txt: continue
+        txt = txt.upper() if is_uppercase else txt
+        word_len = len(txt)
+        
+        if current_len + word_len > max_chars and current_chunk:
             chunks.append(current_chunk)
-            current_chunk = [w]
-            current_len = len(txt)
-        else:
-            current_chunk.append(w)
-            current_len += len(txt) + 1
+            current_chunk = []
+            current_len = 0
+        
+        current_chunk.append({'word': txt, 'start': w['start'], 'end': w['end']})
+        current_len += word_len + 1
+        
     if current_chunk:
         chunks.append(current_chunk)
 
-    # 3. Create ASS Header
+    # Regex patterns for auto-highlighting
+    GREEN_REGEX  = r"^(sukses|kaya|uang|viral|trending|presiden|milyar|triliun|cuan)"
+    YELLOW_REGEX = r"^(penting|rahasia|masalah|solusi|gila|keren|tips|trik|cara|fakta|bukti)"
+
+    # Styles
+    # Alignment 5 = Middle Center
+    style_line = (
+        f"Style: Default,{font_name},{scaled_font_size},{primary_color},&H0000FFFF,{outline_color},{shadow_color},"
+        f"{bold_flag},{is_italic},{is_underline},0,100,100,0,0,1,{scaled_outline:0.2f},{shadow_blur if shadow_enabled else 0},5,0,0,0,1"
+    )
+
     header = [
         "[Script Info]",
         "ScriptType: v4.00+",
@@ -161,40 +194,85 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        # FIX: Alignment=5 (Mid-Center) menghilangkan efek MarginV, koordinat dikendalikan oleh \pos
-        f"Style: Default,{font_name},{scaled_font_size},{primary_color},&H0000FFFF,{outline_color},{shadow_color},-1,0,0,0,100,100,0,0,1,{scaled_outline},{2 if shadow_enabled else 0},5,0,0,0,1",
+        style_line,
         "",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
     ]
 
-    # 4. Generate Events
     events = []
     for chunk in chunks:
-        chunk_start = _to_ass_time(chunk[0]['start'])
-        chunk_end = _to_ass_time(chunk[-1]['end'])
-        
         for i, target_word in enumerate(chunk):
             start_t = _to_ass_time(target_word['start'])
             end_t = _to_ass_time(target_word['end'])
             
-            highlighted_text = ""
+            # Duration of this word in ms for animation timing
+            duration_ms = int((target_word['end'] - target_word['start']) * 1000)
+            anim_duration = min(150, duration_ms) # Cap animation at 150ms
+            
+            highlighted_text = f"{{\\pos({pos_x},{pos_y})}}"
+            
             for j, w in enumerate(chunk):
-                word_txt = w['word'].upper() if is_uppercase else w['word']
-                if i == j:
-                    highlight_tag = "{\\c&H00FFFF&}" # Yellow BGR
-                    highlighted_text += f"{highlight_tag}{word_txt}{{\\c{primary_color}}}"
-                else:
-                    highlighted_text += word_txt
+                is_active = (i == j)
+                word_txt = w['word']
+                
+                # Determine Color
+                is_green_keyword = auto_highlight and re.match(GREEN_REGEX, word_txt, re.IGNORECASE)
+                is_yellow_keyword = auto_highlight and re.match(YELLOW_REGEX, word_txt, re.IGNORECASE)
+                
+                current_color = primary_color
+                if is_active:
+                    current_color = highlight_green
+                elif is_green_keyword:
+                    current_color = highlight_green
+                elif is_yellow_keyword:
+                    current_color = highlight_yellow
+                
+                # Apply Tags
+                tags = [f"\\c{current_color}"]
+                
+                # Apply Animations to Active Word
+                if is_active:
+                    is_intense = style_type in ['explosive', 'hype', 'vibrant']
+                    is_bouncy  = style_type in ['explosive', 'hype', 'vibrant', 'model', 'fast']
+                    
+                    # Pop/Scale effect
+                    scale_val = 125 if is_bouncy else 115
+                    tags.append(f"\\fscx{scale_val}\\fscy{scale_val}")
+                    tags.append(f"\\t(0,{anim_duration},\\fscx100\\fscy100)")
+                    
+                    # Rotation for intense styles
+                    if is_intense:
+                        rot = -4 if i % 2 == 0 else 4
+                        tags.append(f"\\frz{rot}")
+                        tags.append(f"\\t(0,{anim_duration},\\frz0)")
+                    
+                    # Glowing shadow for intense styles
+                    if is_intense and shadow_enabled:
+                        tags.append(f"\\blur15")
+                        tags.append(f"\\t(0,{anim_duration},\\blur{shadow_blur})")
+
+                elif j > i: # Future words (dimmed)
+                    opacity = "99" if style_type in ['explosive', 'hype', 'vibrant'] else "44"
+                    tags.append(f"\\alpha&H{opacity}&")
+                
+                word_full = f"{{{''.join(tags)}}}{word_txt}{{\\alpha&H00&\\fscx100\\fscy100\\frz0\\blur{shadow_blur if shadow_enabled else 0}}}"
+                highlighted_text += word_full
                 
                 if j < len(chunk) - 1:
                     highlighted_text += " "
             
-            # FIX: Injeksi tag \pos(x,y) di awal teks dialog agar mengikuti koordinat UI Drag
-            events.append(f"Dialogue: 0,{start_t},{end_t},Default,,0,0,0,,{{\\pos({pos_x},{pos_y})}}{highlighted_text}")
+            events.append(f"Dialogue: 0,{start_t},{end_t},Default,,0,0,0,,{highlighted_text}")
 
+    # 5. Write to file
     with open(ass_path, 'w', encoding='utf-8') as f:
         f.write("\n".join(header + events))
+    
+    if os.path.exists(ass_path):
+        logger.info(f"[Caption] ASS file created successfully: {os.path.getsize(ass_path)} bytes")
+    else:
+        logger.error(f"[Caption] FAILED to create ASS file at: {ass_path}")
+
 
 def _hex_to_ass(hex_color):
     """Converts #RRGGBB to &HBBGGRR (ASS format)."""
@@ -230,40 +308,51 @@ def _get_video_dimensions(path):
 def _burn_with_ffmpeg(input_path, ass_path, output_path):
     """Uses FFmpeg to burn ASS subtitles into the video."""
     
+    # Ensure input and ASS files exist
+    if not os.path.exists(input_path):
+        logger.error(f"[Caption] INPUT file NOT FOUND at: {input_path}")
+        raise FileNotFoundError(f"Input file not found: {input_path}")
+    if not os.path.exists(ass_path):
+        logger.error(f"[Caption] ASS file NOT FOUND at: {ass_path}")
+        raise FileNotFoundError(f"ASS file not found: {ass_path}")
+
     # Path sanitization for FFmpeg's subtitles filter (crucial on Windows)
-    # FFmpeg expects backslashes to be escaped or forward slashes to be used.
+    # Trying format: subtitles=filename='C\:/path/to/file.ass'
+    # According to FFmpeg's ticket #10243 and related Windows reports:
+    # Forward slashes + escaped colon with one backslash inside single quotes.
     safe_ass_path = ass_path.replace("\\", "/").replace(":", "\\:")
+    vf_filter = f"subtitles=filename='{safe_ass_path}'"
     
     # Try GPU (NVENC) first, fallback to CPU
-    try:
+    for codec, args in [
+        ('h264_nvenc', ['-preset', 'p4', '-rc:v', 'vbr', '-cq:v', '23']),
+        ('libx264', ['-preset', 'fast', '-crf', '23'])
+    ]:
+        # Cleanup output if it exists to avoid lock/prompt issues
+        if os.path.exists(output_path):
+            try: os.remove(output_path)
+            except: pass
+
         cmd = [
             'ffmpeg', '-y',
             '-i', input_path,
-            '-vf', f"subtitles='{safe_ass_path}'",
-            '-c:v', 'h264_nvenc',
-            '-preset', 'p4',
-            '-rc:v', 'vbr',
-            '-cq:v', '23',
+            '-vf', vf_filter,
+            '-c:v', codec,
+            *args,
             '-pix_fmt', 'yuv420p',
             '-c:a', 'copy',
             output_path
         ]
-        logger.info(f"[Caption] Burning with NVENC: {' '.join(cmd)}")
-        subprocess.run(cmd, check=True, capture_output=True)
-    except Exception as e:
-        logger.warning(f"[Caption] NVENC failed, falling back to CPU (libx264): {e}")
-        cmd = [
-            'ffmpeg', '-y',
-            '-i', input_path,
-            '-vf', f"subtitles='{safe_ass_path}'",
-            '-c:v', 'libx264',
-            '-preset', 'fast',
-            '-crf', '23',
-            '-pix_fmt', 'yuv420p',
-            '-c:a', 'copy',
-            output_path
-        ]
-        subprocess.run(cmd, check=True, capture_output=True)
+        
+        try:
+            logger.info(f"[Caption] Burning with {codec}: {' '.join(cmd)}")
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+            return # Success!
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr.strip() if e.stderr else str(e)
+            logger.warning(f"[Caption] {codec} failed: {error_msg}")
+            if codec == 'libx264': # Final failure
+                raise Exception(f"FFmpeg caption burn failed: {error_msg}")
 
 
 # ── Audio helpers (unchanged but cleaned) ─────────────────────────

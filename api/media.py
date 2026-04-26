@@ -156,6 +156,8 @@ async def delete_export(job_id: str, filename: str):
                     os.remove(export_path)
                     print(f"[DELETE] Removed export: {export_path}")
                     return {'status': 'deleted', 'filename': safe_name}
+                except PermissionError:
+                    raise HTTPException(status_code=423, detail='File is currently in use and cannot be deleted')
                 except Exception as e:
                     raise HTTPException(status_code=500, detail=f'Failed to delete: {str(e)}')
 
