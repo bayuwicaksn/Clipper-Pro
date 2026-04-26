@@ -7,7 +7,6 @@ import os
 import json
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Query
-from pydantic import BaseModel
 from typing import Optional
 
 from api import (

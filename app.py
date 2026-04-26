@@ -26,11 +26,20 @@ except ImportError:
 # Suppress TensorFlow warnings
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+from contextlib import asynccontextmanager
+from db.database import create_db_and_tables
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    create_db_and_tables()
+    yield
+
 # ─── Create App ──────────────────────────────────────────────────────────────
 app = FastAPI(
     title="ClipperApp",
     description="AI-powered video clipping engine",
-    version="2.0.0"
+    version="2.0.0",
+    lifespan=lifespan
 )
 
 app.add_middleware(

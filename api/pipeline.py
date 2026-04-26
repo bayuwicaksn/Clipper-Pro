@@ -9,81 +9,38 @@ import uuid
 import asyncio
 import threading
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import Field
 from typing import Optional
 import queue as queue_module
+from sqlmodel import Session
 
 from api import (
-    WORKSPACE, jobs, progress_queues, progress_states,
+    WORKSPACE, progress_queues, progress_states,
     resolve_job_dir, get_clip_dir, is_new_layout,
     create_progress_callback, slugify, logger,
     timestamp_to_seconds, filter_words_by_range
 )
+from db import crud
+from db.database import get_session, engine
+from api.schemas import ProcessRequest, ExportRequest, ReprocessRequest, JobResponse
+from services import job_service
 
 router = APIRouter(prefix="/api", tags=["pipeline"])
 
 
-# ─── Request Models ──────────────────────────────────────────────────────────
-class ProcessRequest(BaseModel):
-    url: str
-    min_duration: int = 30
-    max_duration: int = 90
-    enable_hook: bool = True
-    enable_captions: bool = True
-    reframe_mode: str = 'opencv'
-    tts_voice: str = 'alloy'
-    caption_style: str = 'capcut'
-    ai_provider: str = 'gpt-5.4-mini'
-    transcription_provider: str = 'openai-whisper'
-
-
-class ExportRequest(BaseModel):
-    filename: Optional[str] = None
-    clip_index: Optional[int] = None
-    custom_start: Optional[str] = None
-    custom_end: Optional[str] = None
-    custom_crop_x: Optional[float] = None
-    segments: Optional[list] = None
-    caption_settings: Optional[dict] = None
-    transcript: Optional[list] = None
-    aspect_ratio: str = '9:16'
-
-
-class ReprocessRequest(BaseModel):
-    url: str = ''
-    num_clips: int = 5
-    min_duration: int = 30
-    max_duration: int = 90
-    enable_hook: bool = True
-    enable_captions: bool = True
-    reframe_mode: str = 'opencv'
-    tts_voice: str = 'alloy'
-    caption_style: str = 'capcut'
 
 
 # ─── Internal Pipeline Runner ────────────────────────────────────────────────
 def _run_pipeline(job_id, job_dir, config, progress_callback):
-    """Execute the full clipping pipeline."""
-    from core.pipeline import Pipeline
-
-    jobs[job_id]['status'] = 'processing'
-    try:
-        pipeline = Pipeline(job_dir, config, progress_callback)
-        clips = pipeline.run()
-        jobs[job_id]['status'] = 'completed'
-        jobs[job_id]['clips'] = clips
-        progress_callback('done', f'Completed! Generated {len(clips)} clips.', 100)
-    except Exception as e:
-        jobs[job_id]['status'] = 'error'
-        jobs[job_id]['error'] = str(e)
-        progress_callback('error', str(e), 0)
+    """Execute the full clipping pipeline via job_service."""
+    job_service.start_job(job_id, job_dir, config, progress_callback)
 
 
 # ─── Routes ──────────────────────────────────────────────────────────────────
 @router.post('/process')
-async def start_processing(data: ProcessRequest):
+async def start_processing(data: ProcessRequest, session: Session = Depends(get_session)):
     """Start the full clipping pipeline."""
     if not data.url.strip():
         raise HTTPException(status_code=400, detail='YouTube URL is required')
@@ -94,15 +51,7 @@ async def start_processing(data: ProcessRequest):
 
     config = data.model_dump()
 
-    jobs[job_id] = {
-        'id': job_id,
-        'folder_name': job_id,
-        'status': 'queued',
-        'config': config,
-        'created_at': datetime.now().isoformat(),
-        'clips': [],
-        'error': None,
-    }
+    crud.create_job(session, job_id, config)
 
     callback = create_progress_callback(job_id)
     thread = threading.Thread(
@@ -116,7 +65,7 @@ async def start_processing(data: ProcessRequest):
 
 
 @router.post('/reprocess/{job_id}')
-async def reprocess_job(job_id: str, data: ReprocessRequest):
+async def reprocess_job(job_id: str, data: ReprocessRequest, session: Session = Depends(get_session)):
     """Re-run the pipeline for an existing job."""
     job_dir = resolve_job_dir(job_id)
     if not job_dir:
@@ -145,14 +94,7 @@ async def reprocess_job(job_id: str, data: ReprocessRequest):
         if f.startswith('full_audio'):
             os.remove(os.path.join(job_dir, f))
 
-    jobs[job_id] = {
-        'id': job_id,
-        'status': 'queued',
-        'config': config,
-        'created_at': datetime.now().isoformat(),
-        'clips': [],
-        'error': None,
-    }
+    crud.create_job(session, job_id, config)
 
     callback = create_progress_callback(job_id)
     thread = threading.Thread(
@@ -165,13 +107,22 @@ async def reprocess_job(job_id: str, data: ReprocessRequest):
     return {'job_id': job_id, 'status': 'reprocessing'}
 
 
-@router.get('/status/{job_id}')
-async def get_status(job_id: str):
+@router.get('/status/{job_id}', response_model=JobResponse)
+async def get_status(job_id: str, session: Session = Depends(get_session)):
     """Get job status."""
-    job = jobs.get(job_id)
+    job = crud.get_job(session, job_id)
     if not job:
         raise HTTPException(status_code=404, detail='Job not found')
-    return job
+    
+    # Format Job object back to dict for compatibility
+    return {
+        'id': job.id,
+        'status': job.status,
+        'config': json.loads(job.config) if job.config else {},
+        'created_at': job.created_at.isoformat(),
+        'clips': json.loads(job.clips) if job.clips else [],
+        'error': job.error
+    }
 
 
 @router.get('/progress/{job_id}')
@@ -209,22 +160,23 @@ async def stream_progress(job_id: str):
 
 
 @router.get('/progress-poll/{job_id}')
-async def poll_progress(job_id: str):
+async def poll_progress(job_id: str, session: Session = Depends(get_session)):
     """Polling fallback when SSE doesn't work through tunnels."""
-    job = jobs.get(job_id)
+    job = crud.get_job(session, job_id)
     if not job:
         raise HTTPException(status_code=404, detail='Job not found')
+    
     latest = progress_states.get(job_id, {'step': 'waiting', 'message': 'Starting...', 'progress': 0})
     return {
-        'status': job['status'],
+        'status': job.status,
         'latest_event': latest,
-        'error': job.get('error'),
-        'clips': job.get('clips', []),
+        'error': job.error,
+        'clips': json.loads(job.clips) if job.clips else [],
     }
 
 
 @router.post('/export/{job_id}')
-async def export_clip(job_id: str, data: ExportRequest):
+async def export_clip(job_id: str, data: ExportRequest, session: Session = Depends(get_session)):
     """Start the targeted FFmpeg processing for a single tweaked clip."""
     job_dir = resolve_job_dir(job_id)
     if not job_dir:
@@ -316,51 +268,20 @@ async def export_clip(job_id: str, data: ExportRequest):
 
     export_id = f"{job_id}-export"
     
-    jobs[export_id] = {
-        'id': export_id,
-        'status': 'queued',
-        'error': None
-    }
+    crud.create_job(session, export_id, {})
 
     def run_export():
-        jobs[export_id]['status'] = 'processing'
         callback = create_progress_callback(export_id)
-        try:
-            from core.pipeline import Pipeline
-            pipeline = Pipeline(job_dir, config, callback)
-            
-            final_data = pipeline.export_single_clip(
-                metadata, 
-                custom_start=data.custom_start, 
-                custom_end=data.custom_end, 
-                custom_crop_x=data.custom_crop_x,
-                segments=data.segments,
-                clip_index=clip_index,
-                aspect_ratio=data.aspect_ratio
-            )
-            
-            session_path = os.path.join(job_dir, 'session.json')
-            if os.path.exists(session_path):
-                with open(session_path, 'r', encoding='utf-8') as f:
-                    session_data = json.load(f)
-                
-                clips = session_data.get('clips', [])
-                if clip_index is not None and int(clip_index) < len(clips):
-                    clips[int(clip_index)] = final_data
-                    with open(session_path, 'w', encoding='utf-8') as f:
-                        json.dump(session_data, f, indent=2, ensure_ascii=False)
-            
-            with open(json_path, 'w', encoding='utf-8') as f:
-                json.dump(final_data, f, indent=2, ensure_ascii=False)
-                
-            jobs[export_id]['status'] = 'completed'
-            jobs[export_id]['clips'] = [final_data]
-            callback('done', 'Export finished.', 100)
-            
-        except Exception as e:
-            jobs[export_id]['status'] = 'error'
-            jobs[export_id]['error'] = str(e)
-            callback('error', str(e), 0)
+        job_service.start_export(
+            export_id, 
+            job_dir, 
+            metadata, 
+            clip_index, 
+            data, 
+            config, 
+            json_path, 
+            callback
+        )
 
     thread = threading.Thread(target=run_export, daemon=True)
     thread.start()

@@ -6,18 +6,23 @@ Handles: project listing, deletion, clip metadata retrieval.
 import os
 import json
 from datetime import datetime
-from fastapi import APIRouter, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Depends
+from sqlmodel import Session
 
 from api import (
-    WORKSPACE, jobs, resolve_job_dir, get_clip_dir,
+    WORKSPACE, resolve_job_dir, get_clip_dir,
     is_new_layout, robust_rmtree, logger
 )
+from db import crud
+from db.database import get_session
+from api.schemas import ProjectResponse
 
 router = APIRouter(prefix="/api", tags=["projects"])
 
 
-@router.get('/projects')
-async def list_projects():
+@router.get('/projects', response_model=List[ProjectResponse])
+async def list_projects(session: Session = Depends(get_session)):
     """List all previously processed projects in the workspace."""
     projects = []
     if not os.path.exists(WORKSPACE):
@@ -44,10 +49,13 @@ async def list_projects():
                 with open(session_path, 'r', encoding='utf-8') as f:
                     session_data = json.load(f)
                     created_at = session_data.get('created_at', '')
+                    job = crud.get_job(session, actual_id)
+                    status = job.status if job else 'completed'
+                    
                     projects.append({
                         'id': actual_id,
                         'slug': slug_part,
-                        'status': jobs.get(actual_id, {}).get('status', 'completed'),
+                        'status': status,
                         'title': session_data.get('video', {}).get('title', 'Untitled Project'),
                         'thumbnail': session_data.get('video', {}).get('thumbnail', ''),
                         'video_duration': session_data.get('video', {}).get('duration', 0),
@@ -64,10 +72,13 @@ async def list_projects():
                 try:
                     with open(info_path, 'r', encoding='utf-8') as f:
                         info_data = json.load(f)
+                        job = crud.get_job(session, actual_id)
+                        status = job.status if job else 'completed'
+
                         projects.append({
                             'id': actual_id,
                             'slug': slug_part,
-                            'status': jobs.get(actual_id, {}).get('status', 'completed'),
+                            'status': status,
                             'title': info_data.get('title', 'Untitled Project'),
                             'thumbnail': info_data.get('thumbnail', ''),
                             'video_duration': info_data.get('duration', 0),
@@ -84,18 +95,19 @@ async def list_projects():
 
 
 @router.delete('/projects/{job_id}')
-async def delete_project(job_id: str):
+async def delete_project(job_id: str, session: Session = Depends(get_session)):
     """Delete a project and all its files from the workspace."""
     job_dir = resolve_job_dir(job_id)
     if not job_dir:
         raise HTTPException(status_code=404, detail='Project not found')
         
-    if job_id in jobs and jobs[job_id].get('status') == 'processing':
+    job = crud.get_job(session, job_id)
+    if job and job.status == 'processing':
         raise HTTPException(status_code=400, detail='Cannot delete project while it is currently rendering.')
         
     try:
         robust_rmtree(job_dir)
-        jobs.pop(job_id, None)
+        crud.delete_job(session, job_id)
         return {'status': 'deleted', 'id': job_id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -8,19 +8,17 @@ import re
 import json
 from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from typing import Optional
 
 from api import (
     resolve_job_dir, get_clip_dir, is_new_layout, logger,
     timestamp_to_seconds
 )
+from api.schemas import RegenerateRequest
 
 router = APIRouter(prefix="/api", tags=["ai"])
 
 
-class RegenerateRequest(BaseModel):
-    filename: str
 
 
 @router.get('/captions/presets')
