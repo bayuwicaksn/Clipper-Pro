@@ -159,4 +159,5 @@ async def list_clips(job_id: str):
     if is_new_layout(job_dir):
         pass
 
-    raise HTTPException(status_code=404, detail='Job data missing (session.json not found)')
+    print(f"[EXPORT] ERROR: Final fallback failed. No meta.json found! json_path={session_path}")
+    raise HTTPException(status_code=404, detail='Clip metadata not found (checked all layouts)')

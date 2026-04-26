@@ -3,8 +3,8 @@ import os
 
 class Settings(BaseSettings):
     # App Settings
-    CLIPPER_WORKSPACE: str = "/content/clipper_workspace"
-    DATABASE_URL: str = "sqlite:///./clipper.db"
+    CLIPPER_WORKSPACE: str = "workspace"
+    DATABASE_URL: str = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'clipper.db')}"
     DEBUG: bool = False
     PORT: int = 5000
     HOST: str = "0.0.0.0"

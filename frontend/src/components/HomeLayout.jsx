@@ -25,7 +25,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 
-const API_BASE = "http://127.0.0.1:5000";
+import * as api from "../api/client";
 
 function getInitialProjectId() {
   const path = window.location.pathname;
@@ -63,8 +63,7 @@ export default function HomeLayout({
   const [resultTab, setResultTab] = useState("all");
 
   function fetchClips(jobId) {
-    fetch(`${API_BASE}/api/clips/${jobId}`)
-      .then((res) => res.json())
+    api.fetchClips(jobId)
       .then((data) => setGeneratedClips(data.clips || []))
       .catch(console.error);
   }
@@ -86,7 +85,7 @@ export default function HomeLayout({
   }
 
   function startSSE(jobId) {
-    const eventSource = new EventSource(`${API_BASE}/api/progress/${jobId}`);
+    const eventSource = new EventSource(`${api.API_BASE}/api/progress/${jobId}`);
 
     eventSource.onmessage = (e) => {
       const data = JSON.parse(e.data);
@@ -105,8 +104,7 @@ export default function HomeLayout({
 
     eventSource.onerror = () => {
       eventSource.close();
-      fetch(`${API_BASE}/api/status/${jobId}`)
-        .then((res) => res.json())
+      api.getJobStatus(jobId)
         .then((data) => {
           if (data.status === "completed") {
             setProcessing(false);
@@ -130,21 +128,15 @@ export default function HomeLayout({
     setProgressState({ step: "download", message: "Initiating..." });
     setGeneratedClips([]);
 
-    fetch(`${API_BASE}/api/process`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    api.startProcessing({
         url,
-
         min_duration: parseInt(minDuration, 10),
         max_duration: parseInt(maxDuration, 10),
         reframe_mode: reframeMode,
         tts_voice: ttsVoice,
         ai_provider: aiProvider,
         transcription_provider: transcriptionProvider,
-      }),
-    })
-      .then((res) => res.json())
+      })
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setActiveJobId(data.job_id);
@@ -158,8 +150,7 @@ export default function HomeLayout({
 
   useEffect(() => {
     if (activeJobId && !processing && generatedClips.length === 0) {
-      fetch(`${API_BASE}/api/status/${activeJobId}`)
-        .then((res) => res.json())
+      api.getJobStatus(activeJobId)
         .then((data) => {
           if (data.error) {
             fetchClips(activeJobId);
@@ -310,13 +301,7 @@ export default function HomeLayout({
                         onChange={(e) => {
                           const file = e.target.files[0];
                           if (file) {
-                            const formData = new FormData();
-                            formData.append('file', file);
-                            fetch('http://127.0.0.1:5000/api/upload-cookies', {
-                              method: 'POST',
-                              body: formData,
-                            })
-                            .then(res => res.json())
+                            api.uploadCookies(file)
                             .then(data => alert(data.message || 'Error uploading cookies'))
                             .catch(err => alert('Failed to upload cookies'));
                           }
@@ -447,7 +432,7 @@ export default function HomeLayout({
                   >
                     <div className="relative aspect-video overflow-hidden bg-black" onClick={() => onOpenProject(activeJobId, idx)}>
                       <img
-                        src={`${API_BASE}/api/thumbnail/${activeJobId}/${idx}`}
+                        src={`${api.API_BASE}/api/thumbnail/${activeJobId}/${idx}`}
                         alt={clip.title}
                         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                         onError={(e) => {
@@ -473,7 +458,7 @@ export default function HomeLayout({
                       </Button>
                       {clip.exported && (
                         <Button variant="secondary" size="icon" asChild>
-                          <a href={`${API_BASE}/api/download/${activeJobId}/${clip.filename}`} download>
+                          <a href={`${api.API_BASE}/api/download/${activeJobId}/${clip.filename}`} download>
                             <ExternalLink />
                           </a>
                         </Button>
@@ -503,7 +488,7 @@ export default function HomeLayout({
                         <Card key={`${clipIdx}-${expIdx}`} className="clip-card overflow-hidden">
                           <div className="clip-preview relative flex h-[360px] items-center justify-center overflow-hidden bg-black">
                             <video
-                              src={`${API_BASE}/api/preview/${activeJobId}/${exp.filename}`}
+                              src={`${api.API_BASE}/api/preview/${activeJobId}/${exp.filename}`}
                               className="h-full w-auto object-contain"
                               controls
                               playsInline
@@ -524,7 +509,7 @@ export default function HomeLayout({
                                 Re-edit
                               </Button>
                               <Button asChild variant="secondary" className="flex-1">
-                                <a href={`${API_BASE}/api/download/${activeJobId}/${exp.filename}`} download>
+                                <a href={`${api.API_BASE}/api/download/${activeJobId}/${exp.filename}`} download>
                                   Download
                                 </a>
                               </Button>
@@ -533,8 +518,7 @@ export default function HomeLayout({
                                 size="icon"
                                 onClick={() => {
                                   if (!confirm(`Delete "${exp.version_label || exp.filename}"?`)) return;
-                                  fetch(`${API_BASE}/api/export/${activeJobId}/${exp.filename}`, { method: "DELETE" })
-                                    .then((r) => r.json())
+                                  api.deleteExport(activeJobId, exp.filename)
                                     .then((data) => {
                                       if (data.status === "deleted") {
                                         fetchClips(activeJobId);
@@ -619,8 +603,7 @@ export default function HomeLayout({
                     onClick={(e) => {
                       e.stopPropagation();
                       if (!confirm(`Delete "${proj.title || proj.id}"? This cannot be undone.`)) return;
-                      fetch(`${API_BASE}/api/projects/${proj.id}`, { method: "DELETE" })
-                        .then((res) => res.json())
+                      api.deleteProject(proj.id)
                         .then((data) => {
                           if (data.error) throw new Error(data.error);
                           notify("Project deleted", "success");
