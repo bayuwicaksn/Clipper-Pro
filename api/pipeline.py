@@ -7,6 +7,7 @@ import os
 import json
 import uuid
 import asyncio
+import time
 import threading
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Depends
@@ -112,6 +113,16 @@ async def get_status(job_id: str, session: Session = Depends(get_session)):
     """Get job status."""
     job = crud.get_job(session, job_id)
     if not job:
+        job_dir = resolve_job_dir(job_id)
+        if job_dir and os.path.exists(os.path.join(job_dir, 'session.json')):
+             return {
+                'id': job_id,
+                'status': 'completed',
+                'config': {},
+                'created_at': datetime.now(),
+                'clips': [],
+                'error': None
+            }
         raise HTTPException(status_code=404, detail='Job not found')
     
     # Format Job object back to dict for compatibility
@@ -184,7 +195,7 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
 
     filename = data.filename
     clip_index = data.clip_index
-    print(f"[EXPORT] job_id={job_id}, filename={filename}, clip_index={clip_index}")
+    logger.info(f"[EXPORT] job_id={job_id}, filename={filename}, clip_index={clip_index}")
 
     # Find clip metadata
     json_path = None
@@ -224,7 +235,7 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
     if not json_path:
         json_path = os.path.join(job_dir, 'output', (filename or '').replace('.mp4', '.json'))
     if not os.path.exists(json_path):
-        print(f"[EXPORT] ERROR: No meta.json found! json_path={json_path}")
+        logger.error(f"[EXPORT] ERROR: No meta.json found! json_path={json_path}")
         raise HTTPException(status_code=404, detail='Clip metadata not found')
 
     with open(json_path, 'r', encoding='utf-8') as f:
@@ -266,7 +277,7 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
         except Exception as e:
             print(f"[EXPORT] Warning: could not load source transcript: {e}")
 
-    export_id = f"{job_id}-export"
+    export_id = f"{job_id}-export-{int(time.time())}"
     
     crud.create_job(session, export_id, {})
 

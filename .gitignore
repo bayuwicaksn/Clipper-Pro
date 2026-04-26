@@ -22,3 +22,7 @@ clipperApp_project.zip
 # OS
 .DS_Store
 Thumbs.db
+
+# Local Data
+clipper.db
+cookies.txt

@@ -4,6 +4,8 @@ import EditorLayout from './components/EditorLayout'
 import HomeLayout from './components/HomeLayout'
 import { Toaster, toast } from 'sonner'
 
+import * as api from './api/client'
+
 function App() {
   const [projects, setProjects] = useState([])
   const [currentJobId, setCurrentJobId] = useState(null)
@@ -16,8 +18,7 @@ function App() {
   };
   
   const refreshProjects = () => {
-    fetch('http://127.0.0.1:5000/api/projects')
-      .then(res => res.json())
+    api.fetchProjects()
       .then(data => {
         const sorted = data.sort((a,b) => b.created_timestamp - a.created_timestamp)
         setProjects(sorted)

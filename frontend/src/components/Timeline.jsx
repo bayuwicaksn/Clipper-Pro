@@ -1,4 +1,5 @@
 import React from "react";
+import * as api from "../api/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -17,144 +18,68 @@ import {
   ZoomOut,
 } from "lucide-react";
 
-const frameCache = new Map();
-const MAX_FRAME_CACHE_ENTRIES = 24;
+import { useEditorStore } from '@/store/editorStore';
+import { 
+  formatClock, 
+  formatDuration, 
+  formatRulerLabel, 
+  snapTime,
+  chooseTickStep,
+  timestampToSeconds
+} from "@/utils/time";
 
-function formatClock(sec) {
-  const safe = Math.max(0, sec || 0);
-  const mins = Math.floor(safe / 60);
-  const secs = Math.floor(safe % 60);
-  const cs = Math.floor((safe % 1) * 100);
-  return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}.${cs
-    .toString()
-    .padStart(2, "0")}`;
-}
-
-function formatDuration(sec) {
-  const safe = Math.max(0, sec || 0);
-  const h = Math.floor(safe / 3600);
-  const m = Math.floor((safe % 3600) / 60);
-  const s = Math.floor(safe % 60);
-  const cs = Math.floor((safe % 1) * 100);
-  return `${h}:${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}.${cs
-    .toString()
-    .padStart(2, "0")}`;
-}
-
-function chooseTickStep(rawStep) {
-  const steps = [0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800];
-  for (const step of steps) {
-    if (step >= rawStep) return step;
-  }
-  return 3600;
-}
-
-function formatRulerLabel(sec) {
-  const safe = Math.max(0, sec || 0);
-  const mins = Math.floor(safe / 60);
-  const secs = Math.floor(safe % 60);
-  return `${mins}:${secs.toString().padStart(2, "0")}`;
-}
-
-function snapTime(value, snap) {
-  if (!snap || snap <= 0) return value;
-  return Math.round(value / snap) * snap;
-}
-
-function cacheFrames(key, frames) {
-  frameCache.set(key, frames);
-  while (frameCache.size > MAX_FRAME_CACHE_ENTRIES) {
-    const firstKey = frameCache.keys().next().value;
-    frameCache.delete(firstKey);
-  }
-}
-
-function seekTo(video, time) {
-  return new Promise((resolve) => {
-    const onSeeked = () => {
-      video.removeEventListener("seeked", onSeeked);
-      resolve();
-    };
-    video.addEventListener("seeked", onSeeked, { once: true });
-    video.currentTime = time;
-  });
-}
+import { useTimelineMath } from "../hooks/useTimelineMath";
+import { useVideoExtraction } from "../hooks/useVideoExtraction";
 
 export default function Timeline({
   playerRef,
   isPlayerReady,
-  jobId,
-  clip,
-  segments = [],
-  appMode = 'clipper',
-  activeSegmentIndex,
-  setActiveSegmentIndex,
-  currentTime: propCurrentTime,
-  isPlaying,
-  onTogglePlay,
-  onSeek,
-  totalStart,
-  totalEnd,
   onUpdateSegmentBounds,
   onDeleteSegment,
 }) {
+  const {
+    project,
+    clips,
+    activeClipIndex,
+    segments,
+    activeSegmentIndex,
+    setActiveSegmentIndex,
+    currentTime: storeCurrentTime,
+    setCurrentTime,
+    isPlaying,
+    setSeekRequested,
+    appMode
+  } = useEditorStore();
+
+  const clip = clips[activeClipIndex];
+  const hasClip = Boolean(clip);
+  const startTime = appMode === 'clipper' ? 0 : Math.max(0, clip?.start_time ? timestampToSeconds(clip.start_time) : 0);
+  const totalEnd = appMode === 'clipper' 
+    ? (project?.video_duration ? timestampToSeconds(project.video_duration) : (clip?.duration ? timestampToSeconds(clip.duration) : 60))
+    : Math.max(1, clip?.end_time ? timestampToSeconds(clip.end_time) : (clip?.duration ? timestampToSeconds(clip.duration) : 60));
+  const totalDuration = Math.max(0.1, totalEnd - startTime);
+  const snapStepSec = 0.01;
+
+  const [zoom, setZoom] = React.useState(1);
+  const [snapEnabled, setSnapEnabled] = React.useState(true);
   const canvasRef = React.useRef(null);
   const isScrubbing = React.useRef(false);
   const dragRef = React.useRef(null);
-
-  // 1. Get high-performance frame from Player
-  const playerFrame = useCurrentPlayerFrame(playerRef, isPlayerReady);
-
-  const [zoom, setZoom] = React.useState(1);
-  const [frames, setFrames] = React.useState([]);
-  const [snapEnabled, setSnapEnabled] = React.useState(true);
-  const hasClip = Boolean(clip);
-
-  const safeTotalStart = Number(totalStart) || 0;
-  const safeTotalEnd = Number(totalEnd) || 0;
-
-  const startTime = totalStart !== undefined ? safeTotalStart : segments[0]?.start || 0;
-  const endTime = totalEnd !== undefined ? safeTotalEnd : segments[segments.length - 1]?.end || 0;
-  const totalDuration = Math.max(0.1, endTime - startTime);
-
-  // 2. Decide which time to use for display
-  // playerFrame is relative to activeSegStart
-  const activeSegStart = appMode === 'clipper' ? (segments[0]?.start || 0) : (segments[activeSegmentIndex]?.start ?? startTime);
-  const currentTime = isPlaying
-    ? (playerFrame / 30) + activeSegStart
-    : propCurrentTime;
-
-  const zoomFactor = zoom * (appMode === 'clipper' ? Math.max(1, Math.min(totalDuration / 120, 8)) : 1);
-
-  let rawTrackWidth = 1200 * zoomFactor;
-  if (isNaN(rawTrackWidth) || !isFinite(rawTrackWidth)) rawTrackWidth = 1200;
-  const trackWidth = Math.max(1200, Math.round(rawTrackWidth));
-
-  let rawFrameCount = 26 * Math.min(zoomFactor, 3); // Max out frame count so it doesn't freeze browser
-  if (isNaN(rawFrameCount) || !isFinite(rawFrameCount)) rawFrameCount = 26;
-  const frameCount = Math.max(24, Math.round(rawFrameCount));
-
-  const desiredTicks = Math.max(8, Math.round(12 * zoomFactor));
-  const tickStepSec = chooseTickStep(totalDuration / desiredTicks);
-  const minorTickStepSec = tickStepSec / 5;
-  const tickCount = Math.max(0, Math.floor(totalDuration / tickStepSec));
-  const majorTicks = Array.from({ length: tickCount + 1 }, (_, i) => i * tickStepSec);
-  const minorTicks = [];
-  for (let majorIdx = 0; majorIdx < majorTicks.length - 1; majorIdx += 1) {
-    const base = majorTicks[majorIdx];
-    for (let i = 1; i < 5; i += 1) {
-      const tick = base + i * minorTickStepSec;
-      if (tick < totalDuration) minorTicks.push(tick);
-    }
-  }
-  const snapStepSec = 0.01; // Frame-accurate snapping for smooth movement
-
   const hasInitiallyScrolled = React.useRef(false);
 
-  // Reset initial scroll when mode or clip changes
-  React.useEffect(() => {
-    hasInitiallyScrolled.current = false;
-  }, [appMode, clip]);
+  const { zoomFactor, trackWidth, frameCount, majorTicks, minorTicks } = useTimelineMath(totalDuration, zoom, appMode);
+  const { frames } = useVideoExtraction(project?.id, startTime, totalDuration, frameCount);
+  const playerFrame = useCurrentPlayerFrame(playerRef, isPlayerReady);
+
+  const activeSegStart = appMode === 'clipper' ? (segments[0]?.start || 0) : (segments[activeSegmentIndex]?.start ?? startTime);
+  const currentTime = isPlaying ? (playerFrame / 30) + activeSegStart : storeCurrentTime;
+
+  const onSeek = (time) => {
+    setSeekRequested(Math.max(0, time));
+    setCurrentTime(Math.max(0, time));
+  };
+
+  const onTogglePlay = () => useEditorStore.getState().setIsPlaying(!isPlaying);
 
   // Auto-scroll to keep playhead in view during playback, scrubbing, or initial load
   React.useEffect(() => {
@@ -190,80 +115,6 @@ export default function Timeline({
     if (isNaN(p) || !isFinite(p)) return 0;
     return Math.max(0, Math.min(100, p));
   };
-
-  React.useEffect(() => {
-    let canceled = false;
-
-    async function extractFrames() {
-      if (!jobId) {
-        setFrames([]);
-        return;
-      }
-      const cacheKey = [
-        jobId,
-        Math.round(startTime * 1000),
-        Math.round(totalDuration * 1000),
-        frameCount,
-      ].join(":");
-
-      if (frameCache.has(cacheKey)) {
-        setFrames(frameCache.get(cacheKey));
-        return;
-      }
-
-      try {
-        const video = document.createElement("video");
-        video.crossOrigin = "anonymous";
-        video.muted = true;
-        video.playsInline = true;
-        video.preload = "auto";
-        video.src = `http://${window.location.hostname}:5000/api/preview_source/${jobId}`;
-
-        await new Promise((resolve, reject) => {
-          video.onloadedmetadata = resolve;
-          video.onerror = reject;
-        });
-
-        const canvas = document.createElement("canvas");
-        canvas.width = 128;
-        canvas.height = 72;
-        const ctx = canvas.getContext("2d");
-
-        if (!ctx) {
-          setFrames([]);
-          return;
-        }
-
-        const extracted = [];
-        for (let i = 0; i < frameCount; i += 1) {
-          if (canceled) return;
-          const t = startTime + (i / Math.max(1, frameCount - 1)) * totalDuration;
-          await seekTo(video, Math.min(video.duration || t, Math.max(0, t)));
-          try {
-            ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-            extracted.push(canvas.toDataURL("image/jpeg", 0.62));
-          } catch {
-            break;
-          }
-        }
-        if (!canceled) {
-          if (extracted.length > 0) {
-            cacheFrames(cacheKey, extracted);
-            setFrames(extracted);
-          } else {
-            setFrames([]);
-          }
-        }
-      } catch {
-        if (!canceled) setFrames([]);
-      }
-    }
-
-    extractFrames();
-    return () => {
-      canceled = true;
-    };
-  }, [jobId, startTime, totalDuration, frameCount]);
 
   function handleScrub(event) {
     if (!canvasRef.current || !onSeek) return;

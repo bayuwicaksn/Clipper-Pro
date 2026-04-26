@@ -1,34 +1,46 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import { CustomCaptions } from './CustomCaptions';
+import * as api from "../api/client";
 
 /**
  * Custom Preview Component
  * Replaces legacy player with standard HTML5 <video> and React state.
  */
+import { useEditorStore } from '@/store/editorStore';
+import { useInteractivePreview } from '@/hooks/useInteractivePreview';
+
 const CustomPreview = ({
   playerRef,
   setPlayerReady,
-  appMode,
-  jobId,
-  aspectRatio = '9:16',
   startSecs,
   endSecs,
-  currentTime,
   cropX,
   cropY,
   cropZ,
   setCropX,
   setCropY,
   setCropZ,
-  onTimeUpdate,
-  seekRequested,
-  playing,
   onSegmentEnd,
-  transcript,
-  captionSettings,
-  setCaptionSettings,
 }) => {
+  const {
+    project,
+    aspectRatio,
+    currentTime,
+    setCurrentTime,
+    seekRequested,
+    isPlaying: playing,
+    transcript,
+    captionSettings,
+    setCaptionSettings,
+    panX, setPanX,
+    panY, setPanY,
+    videoAspectRatio, setVideoAspectRatio,
+    appMode
+  } = useEditorStore();
+
+  const onTimeUpdate = (time) => setCurrentTime(time);
+  const jobId = project?.id;
   const videoRef = useRef(null);
   const captionOverlayRef = useRef(null);
   const aspectRatioBoxRef = useRef(null);
@@ -36,13 +48,18 @@ const CustomPreview = ({
   const listenersRef = useRef({ frameupdate: new Set() });
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
-  const [videoAspectRatio, setVideoAspectRatio] = useState(16 / 9);
   const [viewZoom, setViewZoom] = useState(1.0); // 1.0 = Fit
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
-  const [isCanvasPanning, setIsCanvasPanning] = useState(false);
+
   const [activeElement, setActiveElement] = useState(null); // null | 'video' | 'caption'
-  const canvasPanStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+
+  const {
+    dragState, setDragState,
+    isCanvasPanning, setIsCanvasPanning,
+    isSnappedX, isSnappedY, isSnappedZ, isSnappedCaptionX,
+    canvasPanStart
+  } = useInteractivePreview(videoRef, aspectRatioBoxRef, captionOverlayRef, {
+    cropX, cropY, cropZ, setCropX, setCropY, setCropZ, captionSettings, setCaptionSettings, videoAspectRatio
+  });
 
   const handleZoomChange = useCallback((newZoom) => {
     setViewZoom(newZoom);
@@ -52,10 +69,7 @@ const CustomPreview = ({
     }
   }, []);
 
-  const videoSrc = `${window.location.protocol}//${window.location.hostname}:5000/api/preview_source/${jobId}`;
-
-  // Interactive Dragging State
-  const [dragState, setDragState] = useState(null); // { type: 'pan' | 'resize', startX, startY, initialX, initialY, initialZ }
+  const videoSrc = jobId ? `${api.API_BASE}/api/preview_source/${jobId}` : null;
 
   const startPan = useCallback((e) => {
     e.preventDefault();
@@ -64,21 +78,19 @@ const CustomPreview = ({
       startX: e.clientX,
       startY: e.clientY,
       initialX: cropX || 0.5,
-      initialY: cropY || 0.5
+      initialY: cropY || 0.5,
+      initialZ: cropZ
     });
-  }, [cropX, cropY]);
+  }, [cropX, cropY, cropZ, setDragState]);
 
   const startCanvasPan = useCallback((e) => {
-    // Don't pan if clicking interactive elements
     if (e.target.closest('[data-no-canvas-pan]')) return;
-
-    setActiveElement(null); // Deselect on canvas click
+    setActiveElement(null);
     setIsCanvasPanning(true);
-    canvasPanStart.current = { x: e.clientX, y: e.clientY, panX, panY };
-  }, [panX, panY]);
+    canvasPanStart.current = { x: e.clientX, y: e.clientY, panX: panX, panY: panY };
+  }, [setIsCanvasPanning, canvasPanStart, panX, panY]);
 
   const handleCanvasDoubleClick = useCallback((e) => {
-    // Don't reset if double click on interactive elements
     if (e.target.closest('[data-no-canvas-pan]')) return;
     handleZoomChange(1.0); // Reset zoom to Fit
     setPanX(0);            // Center pan
@@ -95,12 +107,7 @@ const CustomPreview = ({
       startY: e.clientY,
       initialZ: cropZ || 1.0
     });
-  }, [cropZ]);
-
-  const [isSnappedX, setIsSnappedX] = useState(false);
-  const [isSnappedY, setIsSnappedY] = useState(false);
-  const [isSnappedZ, setIsSnappedZ] = useState(false);
-  const [isSnappedCaptionX, setIsSnappedCaptionX] = useState(false);
+  }, [cropZ, setDragState]);
 
   const startCaptionDrag = useCallback((e) => {
     if (appMode !== 'editor') return;
@@ -113,7 +120,7 @@ const CustomPreview = ({
       initialX: captionSettings?.captionX ?? 0.5,
       initialY: captionSettings?.captionY ?? 0.8
     });
-  }, [appMode, captionSettings]);
+  }, [appMode, captionSettings, setDragState]);
 
   const startCaptionResize = useCallback((e) => {
     if (appMode !== 'editor') return;
@@ -126,157 +133,7 @@ const CustomPreview = ({
       initialSize: captionSettings?.fontSize ?? 42,
       initialWidth: captionSettings?.captionWidth ?? 85
     });
-  }, [appMode, captionSettings]);
-
-  useEffect(() => {
-    if (!dragState && !isCanvasPanning) {
-      setIsSnappedX(false);
-      setIsSnappedY(false);
-      setIsSnappedCaptionX(false);
-      return;
-    }
-
-    let rafId = null;
-
-    const handleMouseMove = (e) => {
-      if (rafId) return;
-
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-
-        if (dragState) {
-          const dx = e.clientX - dragState.startX;
-          const dy = e.clientY - dragState.startY;
-
-          if (dragState.type === 'pan') {
-            const container = videoRef.current?.parentElement;
-            if (!container) return;
-
-            const sensitivityX = 1 / (container.clientWidth * (cropZ || 1.0));
-            const sensitivityY = 1 / (container.clientHeight * (cropZ || 1.0));
-
-            let newX = dragState.initialX - dx * sensitivityX;
-            let newY = dragState.initialY - dy * sensitivityY;
-
-            // Snapping Logic (Center)
-            const snapThreshold = 0.015;
-            const snappedX = Math.abs(newX - 0.5) < snapThreshold;
-            const snappedY = Math.abs(newY - 0.5) < snapThreshold;
-
-            if (snappedX) newX = 0.5;
-            if (snappedY) newY = 0.5;
-
-            setIsSnappedX(snappedX);
-            setIsSnappedY(snappedY);
-
-            setCropX(Math.max(0, Math.min(1, newX)));
-            setCropY(Math.max(0, Math.min(1, newY)));
-          } else if (dragState.type === 'resize') {
-            const sensitivity = 0.005;
-            const zoomDelta = (dragState.handle.includes('t') ? -dy : dy) * sensitivity;
-            let newZ = dragState.initialZ + zoomDelta;
-
-            // MULTI-RATIO SIZE SNAPPING
-            const container = videoRef.current?.parentElement;
-            if (container) {
-              const videoAR = videoAspectRatio || 16 / 9;
-              const W_p = container.clientWidth;
-              const H_p = container.clientHeight;
-              const W_dom = Math.min(W_p, H_p * videoAR);
-              const H_dom = Math.min(H_p, W_p / videoAR);
-
-              const ratios = [
-                { name: '9:16', val: 9 / 16 },
-                { name: '4:5', val: 4 / 5 },
-                { name: '1:1', val: 1 / 1 },
-                { name: 'Fit', val: videoAR }
-              ];
-
-              const snapPoints = [1.0];
-              ratios.forEach(r => {
-                const W_m = Math.min(W_p, H_p * r.val);
-                const H_m = Math.min(H_p, W_p / r.val);
-                snapPoints.push(W_m / W_dom, H_m / H_dom);
-              });
-
-              const zSnapThreshold = 0.06; // Stronger magnetic feel
-              let snapped = false;
-              for (const pt of snapPoints) {
-                if (Math.abs(newZ - pt) < zSnapThreshold) {
-                  newZ = pt;
-                  snapped = true;
-                  break;
-                }
-              }
-              setIsSnappedZ(snapped);
-            }
-
-            setCropZ(Math.max(0.1, Math.min(10.0, newZ)));
-          } else if (dragState.type === 'caption-pan') {
-            const container = aspectRatioBoxRef.current;
-            if (!container) return;
-
-            const sensitivityX = 1 / container.clientWidth;
-            const sensitivityY = 1 / container.clientHeight;
-
-            const newX = dragState.initialX + dx * sensitivityX;
-            const newY = dragState.initialY + dy * sensitivityY;
-
-            // Caption snapping (Center X)
-            const snapThreshold = 0.015;
-            const snappedX = Math.abs(newX - 0.5) < snapThreshold;
-            const finalX = snappedX ? 0.5 : newX;
-            setIsSnappedCaptionX(snappedX);
-
-            // Direct DOM Update for zero-latency
-            if (captionOverlayRef.current) {
-              captionOverlayRef.current.style.left = `${finalX * 100}%`;
-              captionOverlayRef.current.style.top = `${newY * 100}%`;
-            }
-
-            // Still push to state for sidebar sync (RAF throttled)
-            setCaptionSettings(prev => ({
-              ...prev,
-              captionX: finalX,
-              captionY: newY
-            }));
-          } else if (dragState.type === 'caption-resize') {
-            // Independent movement: dx for width, dy for font size
-            const wSensitivity = 0.2;
-            const fSensitivity = 0.5;
-
-            const dw = dx * wSensitivity;
-            const df = -dy * fSensitivity;
-
-            const newWidth = Math.max(10, dragState.initialWidth + dw);
-            const newSize = Math.max(10, Math.min(300, dragState.initialSize + df));
-
-            setCaptionSettings(prev => ({
-              ...prev,
-              fontSize: Math.round(newSize),
-              captionWidth: Math.round(newWidth)
-            }));
-          }
-        } else if (isCanvasPanning) {
-          setPanX(canvasPanStart.current.panX + (e.clientX - canvasPanStart.current.x));
-          setPanY(canvasPanStart.current.panY + (e.clientY - canvasPanStart.current.y));
-        }
-      });
-    };
-
-    const handleMouseUp = () => {
-      setDragState(null);
-      setIsCanvasPanning(false);
-      setIsSnappedCaptionX(false);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [dragState, isCanvasPanning, cropZ, setCropX, setCropY, setCropZ, setCaptionSettings, videoAspectRatio]);
+  }, [appMode, captionSettings, setDragState]);
 
   // Expose methods to the parent via playerRef
   useEffect(() => {

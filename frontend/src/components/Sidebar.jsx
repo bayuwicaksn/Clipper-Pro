@@ -2,32 +2,41 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Sparkles, ChevronDown, Type, Scissors, ChevronLeft } from 'lucide-react';
 
+import { useEditorStore } from '@/store/editorStore';
+
 export default function Sidebar({
   presets,
-  clip, jobId, clipIndex, activeTab,
-  captionSettings, setCaptionSettings,
-  currentTime, onSeek,
-  transcript, setTranscript,
-  isLoadingTranscript, onRegenerateTranscript,
-  onSplit, onAutoSplit, onAutoTrack
+  onSplit,
+  onAutoSplit,
+  onAutoTrack,
+  onRegenerateTranscript
 }) {
-  const [activeSubTab, setActiveSubTab] = useState('Font');
+  const {
+    project,
+    clips,
+    activeClipIndex,
+    activeTab,
+    captionSettings,
+    setCaptionSettings,
+    currentTime,
+    setCurrentTime,
+    setSeekRequested,
+    transcript,
+    setTranscript,
+    isLoadingTranscript,
+    applyCaptionPreset
+  } = useEditorStore();
+
+  const clip = clips[activeClipIndex];
+
+  const onSeek = (time) => {
+    setSeekRequested(time);
+    setCurrentTime(time);
+  };
+  const [activeSubTab, setActiveSubTab] = useState('Presets');
 
   const updateSettings = (key, value) => {
-    setCaptionSettings(prev => ({ ...prev, [key]: value }));
-  };
-
-  const applyPreset = (p) => {
-    setCaptionSettings(prev => ({
-      ...prev,
-      presetId: p.id,
-      presetName: p.name,
-      primaryColor: p.colors?.primary || prev.primaryColor,
-      outlineColor: p.colors?.outline || prev.outlineColor,
-      outlineWidth: p.layout?.outline_width || prev.outlineWidth,
-      shadowEnabled: !!p.layout?.shadow,
-      verticalMargin: p.layout?.vertical_margin || prev.verticalMargin
-    }));
+    setCaptionSettings({ ...captionSettings, [key]: value });
   };
 
   if (!clip) return <div className="nle-panel-content p-8 text-center text-zinc-500">Select a clip</div>;
@@ -68,7 +77,7 @@ export default function Sidebar({
                 <div
                   key={idx}
                   className={`group relative aspect-square rounded-xl bg-[#1e1e21] border-2 flex flex-col items-center justify-center cursor-pointer transition-all ${captionSettings.presetId === p.id ? 'border-white bg-white/5' : 'border-[#27272a] hover:border-zinc-500'}`}
-                  onClick={() => applyPreset(p)}
+                  onClick={() => applyCaptionPreset(p)}
                 >
                   <div className="flex items-center justify-center h-full w-full p-4 overflow-hidden" style={{
                     fontFamily: `"${p.font?.family || 'Anton'}", sans-serif`,

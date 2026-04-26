@@ -1,24 +1,45 @@
 import React from 'react';
 import Preview from './CustomPreview';
 import Timeline from './Timeline';
+import { timestampToSeconds, formatTimeHHMMSS } from "@/utils/time";
+
+import { useEditorStore } from '@/store/editorStore';
 
 export default function ClipperView({
-  project,
-  activeClip,
-  activeClipIndex,
   playerRef,
   setIsPlayerReady,
-  currentTime,
-  setCurrentTime,
-  seekRequested,
-  setSeekRequested,
-  isPlaying,
-  setIsPlaying,
-  handleSegmentBoundsChange,
-  setClips,
-  isPlayerReady,
-  aspectRatio
+  isPlayerReady
 }) {
+  const {
+    project,
+    clips,
+    activeClipIndex,
+    currentTime,
+    setCurrentTime,
+    seekRequested,
+    setSeekRequested,
+    isPlaying,
+    setIsPlaying,
+    aspectRatio,
+    setClips
+  } = useEditorStore();
+
+  const activeClip = clips[activeClipIndex];
+
+  const handleSegmentBoundsChange = (segmentIndex, nextStart, nextEnd) => {
+    setClips(prev => {
+      const updated = [...prev];
+      const clip = { ...updated[activeClipIndex] };
+      let safeStart = Math.max(0, Math.min(nextStart, nextEnd - 1));
+      let safeEnd = Math.max(safeStart + 1, nextEnd);
+      if (project?.video_duration && safeEnd > project.video_duration) safeEnd = project.video_duration;
+      clip.start_time = formatTimeHHMMSS(safeStart);
+      clip.end_time = formatTimeHHMMSS(safeEnd);
+      updated[activeClipIndex] = clip;
+      return updated;
+    });
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* PREVIEW AREA */}
@@ -36,11 +57,9 @@ export default function ClipperView({
           cropY={0.5}
           cropZ={1.0}
           setCropX={(newX) => {
-            setClips(prev => {
-              const updated = [...prev];
-              updated[activeClipIndex] = { ...updated[activeClipIndex], custom_crop_x: newX };
-              return updated;
-            });
+            const updated = [...clips];
+            updated[activeClipIndex] = { ...updated[activeClipIndex], custom_crop_x: newX };
+            setClips(updated);
           }}
           onTimeUpdate={setCurrentTime}
           seekRequested={seekRequested}
@@ -87,7 +106,7 @@ export default function ClipperView({
               setCurrentTime(Math.max(0, time));
             }}
             isPlaying={isPlaying}
-            onTogglePlay={() => setIsPlaying((v) => !v)}
+            onTogglePlay={() => setIsPlaying(!isPlaying)}
             onUpdateSegmentBounds={handleSegmentBoundsChange}
           />
         </div>
@@ -96,19 +115,3 @@ export default function ClipperView({
   );
 }
 
-// Helpers duplicated here or extracted to a separate file later if needed
-function timestampToSeconds(ts) {
-  if (typeof ts === 'number') return ts;
-  if (!ts || typeof ts !== 'string') return 0;
-  const parts = ts.split(':').map(parseFloat);
-  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  if (parts.length === 2) return parts[0] * 60 + parts[1];
-  return parts[0] || 0;
-}
-
-function formatTimeHHMMSS(sec) {
-  const h = Math.floor(sec / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  const s = sec % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s < 10 ? '0' : ''}${s.toFixed(3)}`;
-}

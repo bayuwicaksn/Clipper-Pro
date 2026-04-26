@@ -2,10 +2,19 @@ import React from 'react';
 import { Type } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-const TranscriptPanel = ({
-  transcript, currentTime, isLoadingTranscript,
-  setSeekRequested, setCurrentTime, loadTranscript
-}) => {
+import { useEditorStore } from '@/store/editorStore';
+
+const TranscriptPanel = () => {
+  const {
+    transcript,
+    currentTime,
+    isLoadingTranscript,
+    setSeekRequested,
+    setCurrentTime,
+    fetchTranscript
+  } = useEditorStore();
+  
+  const loadTranscript = () => fetchTranscript(true);
   const safeTranscript = Array.isArray(transcript) ? transcript : [];
 
   return (
