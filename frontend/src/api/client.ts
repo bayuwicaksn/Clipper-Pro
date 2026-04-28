@@ -77,6 +77,22 @@ export const fetchCaptionPresets = () =>
 export const fetchTranscript = (jobId: string, clipIdx: number, force: boolean = false) => 
   apiFetch<any[]>(`/api/transcript/${jobId}/${clipIdx}${force ? '?force=true' : ''}`);
 
+export const generateCaptionComposition = async (
+  jobId: string, 
+  transcript: any[], 
+  captionSettings: any, 
+  aspectRatio: string = '9:16'
+): Promise<string> => {
+  const response = await fetch(`${API_BASE}/api/caption_composition/${jobId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ transcript, caption_settings: captionSettings, aspect_ratio: aspectRatio }),
+  });
+  if (!response.ok) throw new Error('Failed to generate caption composition');
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+};
+
 export const autoTrackFace = (jobId: string, clipIndex: number, timestamp: number) => 
   apiFetch<{ crop_x?: number; error?: string }>(`/api/auto_track/${jobId}?clip_index=${clipIndex}&timestamp=${timestamp}`);
 

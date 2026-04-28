@@ -190,7 +190,8 @@ class Pipeline:
             
             final_data = self._process_single_clip(
                 raw_clip_path, clip_metadata, idx, 1,
-                aspect_ratio=aspect_ratio
+                aspect_ratio=aspect_ratio,
+                work_dir=segments_dir
             )
             
             # Cleanup temporary segments directory
@@ -216,17 +217,23 @@ class Pipeline:
             self.progress('error', f'Export failed: {str(e)}', 0)
             raise
 
-    def _process_single_clip(self, raw_clip_path, highlight, index, total, aspect_ratio='9:16'):
+    def _process_single_clip(self, raw_clip_path, highlight, index, total, aspect_ratio='9:16', work_dir=None):
         """Process a single clip through reframe → captions → hook (all FFmpeg-native)."""
         clip_dir = self._clip_dir(index)
         exports_dir = os.path.join(clip_dir, 'exports')
+        os.makedirs(exports_dir, exist_ok=True)
+        
+        # Use work_dir for intermediate files, fall back to exports if none provided
+        temp_dir = work_dir or exports_dir
+        os.makedirs(temp_dir, exist_ok=True)
+        
         clip_name = f'clip_{index+1:02d}'
 
         current_path = raw_clip_path
 
         # ─── Step 1: Reframe (16:9 → 9:16 portrait crop) ─────────
         self.progress('reframe', f'Reframing clip to portrait...', 40)
-        reframed_path = os.path.join(exports_dir, f'{clip_name}_reframed.mp4')
+        reframed_path = os.path.join(temp_dir, f'{clip_name}_reframed.mp4')
 
         from core.reframer import reframe_clip
 
@@ -249,7 +256,7 @@ class Pipeline:
         # ─── Step 2: Hook intro (optional TTS + blurred intro) ───
         if self.config.get('enable_hook', True) and highlight.get('hook_text'):
             self.progress('hook', f'Generating hook intro...', 55)
-            hooked_path = os.path.join(exports_dir, f'{clip_name}_hooked.mp4')
+            hooked_path = os.path.join(temp_dir, f'{clip_name}_hooked.mp4')
             try:
                 from core.hook_generator import generate_hook
                 generate_hook(
@@ -262,10 +269,10 @@ class Pipeline:
             except Exception as e:
                 self.logger.warning(f"Hook generation failed (non-fatal): {e}")
 
-        # ─── Step 3: Captions (pycaps karaoke-style) ─────────────
+        # ─── Step 3: Captions (HyperFrames composition + GSAP) ────
         if self.config.get('enable_captions', True):
-            self.progress('caption', f'Burning captions...', 70)
-            captioned_path = os.path.join(exports_dir, f'{clip_name}_final.mp4')
+            self.progress('caption', f'Generating caption composition...', 70)
+            captioned_path = os.path.join(temp_dir, f'{clip_name}_final.mp4')
 
             # Prepare word-level transcript mapped to clip-local time
             custom_words = None
@@ -283,21 +290,77 @@ class Pipeline:
                             'end': max(0, local_end)
                         })
 
-            from core.caption_generator import generate_captions
-            generate_captions(
-                current_path, captioned_path,
-                config=self.config,
-                progress_callback=self.progress,
-                clip_index=index, total_clips=total,
-                custom_words=custom_words
-            )
+            caption_success = False
+            caption_settings = self.config.get('caption_settings', {})
+
+            # Try HyperFrames composition-based rendering first
+            if custom_words and caption_settings.get('presetId') != 'none':
+                try:
+                    from core.caption_composition import generate_caption_composition, render_composition
+
+                    # Parse video dimensions from aspect ratio
+                    ar = self.config.get('aspect_ratio', '9:16')
+                    try:
+                        parts = [float(x) for x in ar.split(':')]
+                        video_w = 1080 if parts[0] < parts[1] else 1920
+                        video_h = 1920 if parts[0] < parts[1] else 1080
+                    except Exception:
+                        video_w, video_h = 1080, 1920
+
+                    # Generate HTML composition
+                    composition_path = os.path.join(temp_dir, f'{clip_name}_caption.html')
+                    generate_caption_composition(
+                        video_src=current_path,
+                        output_html=composition_path,
+                        words=custom_words,
+                        settings=caption_settings,
+                        video_w=video_w,
+                        video_h=video_h,
+                    )
+
+                    # Render composition to transparent MOV (Hybrid Approach)
+                    self.progress('caption', f'Rendering captions (Hybrid Overlay)...', 80)
+                    overlay_mov_path = os.path.join(temp_dir, f'{clip_name}_overlay.mov')
+                    render_composition(composition_path, overlay_mov_path)
+
+                    if os.path.exists(overlay_mov_path) and os.path.getsize(overlay_mov_path) > 0:
+                        # Step 4: Composite the transparent captions over the reframed video
+                        self.progress('caption', f'Compositing hybrid final video...', 85)
+                        from core.caption_composition import composite_transparent_captions
+                        composite_transparent_captions(current_path, overlay_mov_path, captioned_path)
+                        
+                        if os.path.exists(captioned_path) and os.path.getsize(captioned_path) > 0:
+                            caption_success = True
+                            self.logger.info(f"[Pipeline] Hybrid HyperFrames caption render successful")
+                    
+                    # Cleanup composition HTML and overlay MOV
+                    try:
+                        if os.path.exists(composition_path): os.remove(composition_path)
+                        if os.path.exists(overlay_mov_path): os.remove(overlay_mov_path)
+                    except Exception:
+                        pass
+
+                except Exception as e:
+                    self.logger.warning(f"[Pipeline] HyperFrames caption failed, falling back to ASS: {e}")
+
+            # Fallback: old ASS-based caption burning
+            if not caption_success:
+                self.progress('caption', f'Burning captions (fallback)...', 80)
+                from core.caption_generator import generate_captions
+                generate_captions(
+                    current_path, captioned_path,
+                    config=self.config,
+                    progress_callback=self.progress,
+                    clip_index=index, total_clips=total,
+                    custom_words=custom_words
+                )
 
             if os.path.exists(captioned_path) and os.path.getsize(captioned_path) > 0:
                 current_path = captioned_path
         else:
             # No captions — just copy to final location
             import shutil
-            captioned_path = os.path.join(exports_dir, f'{clip_name}_final.mp4')
+            captioned_path = os.path.join(temp_dir, f'{clip_name}_final.mp4')
             shutil.copy(current_path, captioned_path)
             current_path = captioned_path
 

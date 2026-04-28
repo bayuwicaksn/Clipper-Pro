@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Minus, Plus } from 'lucide-react';
-import { CustomCaptions } from './CustomCaptions';
 import * as api from "../api/client";
 
 /**
@@ -9,6 +8,7 @@ import * as api from "../api/client";
  */
 import { useEditorStore } from '@/store/editorStore';
 import { useInteractivePreview } from '@/hooks/useInteractivePreview';
+import { CustomCaptions } from './CustomCaptions';
 
 const CustomPreview = ({
   playerRef,
@@ -44,11 +44,17 @@ const CustomPreview = ({
   const videoRef = useRef(null);
   const captionOverlayRef = useRef(null);
   const aspectRatioBoxRef = useRef(null);
+  const frameRef = useRef(null);
+  const captionIframeRef = useRef(null);
   const scrollAreaRef = useRef(null);
   const listenersRef = useRef({ frameupdate: new Set() });
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [viewZoom, setViewZoom] = useState(1.0); // 1.0 = Fit
+  const [frameHeight, setFrameHeight] = useState(540);
+  const [compositionUrl, setCompositionUrl] = useState(null);
+  const [captionIframeReady, setCaptionIframeReady] = useState(false);
+  const compositionGenTimer = useRef(null);
 
   const [activeElement, setActiveElement] = useState(null); // null | 'video' | 'caption'
 
@@ -122,16 +128,25 @@ const CustomPreview = ({
     });
   }, [appMode, captionSettings, setDragState]);
 
-  const startCaptionResize = useCallback((e) => {
+  const startCaptionResize = useCallback((e, handle) => {
     if (appMode !== 'editor') return;
     e.preventDefault();
     e.stopPropagation();
+    
+    const rect = captionOverlayRef.current?.getBoundingClientRect();
+    const containerRect = aspectRatioBoxRef.current?.getBoundingClientRect();
+
     setDragState({
       type: 'caption-resize',
+      handle,
       startX: e.clientX,
       startY: e.clientY,
-      initialSize: captionSettings?.fontSize ?? 42,
-      initialWidth: captionSettings?.captionWidth ?? 85
+      initialSize: captionSettings?.fontSize ?? 100,
+      initialWidth: captionSettings?.captionWidth ?? 85,
+      initialX: captionSettings?.captionX ?? 0.5,
+      initialY: captionSettings?.captionY ?? 0.8,
+      rect,
+      containerRect
     });
   }, [appMode, captionSettings, setDragState]);
 
@@ -194,7 +209,7 @@ const CustomPreview = ({
     }
   }, [startSecs, playing, isVideoReady]);
 
-  // Time Updates
+  // Time Updates + Caption iframe sync
   useEffect(() => {
     let animationFrameId;
     const updateTime = () => {
@@ -203,6 +218,11 @@ const CustomPreview = ({
         setCurrentTimeMs(time * 1000);
         onTimeUpdate(time);
         listenersRef.current['frameupdate']?.forEach(cb => cb());
+
+        // Sync caption iframe via postMessage
+        if (captionIframeRef.current?.contentWindow) {
+          captionIframeRef.current.contentWindow.postMessage({ type: 'seek', time }, '*');
+        }
 
         if (time >= endSecs && playing) {
           videoRef.current.pause();
@@ -218,11 +238,86 @@ const CustomPreview = ({
       if (videoRef.current) {
         setCurrentTimeMs(videoRef.current.currentTime * 1000);
         listenersRef.current['frameupdate']?.forEach(cb => cb());
+        // Sync caption iframe when paused too
+        if (captionIframeRef.current?.contentWindow) {
+          captionIframeRef.current.contentWindow.postMessage({ type: 'seek', time: videoRef.current.currentTime }, '*');
+        }
       }
     }
 
     return () => cancelAnimationFrame(animationFrameId);
   }, [playing, onTimeUpdate, endSecs, onSegmentEnd]);
+
+  // Track frame height for caption proportional scaling
+  useEffect(() => {
+    const el = frameRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const h = entry.contentRect.height;
+        if (h > 0) setFrameHeight(h);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Generate caption composition (debounced)
+  useEffect(() => {
+    if (!jobId || !transcript?.length || captionSettings?.presetId === 'none') {
+      setCompositionUrl(null);
+      setCaptionIframeReady(false);
+      return;
+    }
+
+    // Debounce: regenerate 800ms after last settings change
+    if (compositionGenTimer.current) clearTimeout(compositionGenTimer.current);
+    compositionGenTimer.current = setTimeout(async () => {
+      try {
+        const url = await api.generateCaptionComposition(
+          jobId, transcript, captionSettings, aspectRatio
+        );
+        // Revoke old blob URL
+        if (compositionUrl) URL.revokeObjectURL(compositionUrl);
+        setCompositionUrl(url);
+        setCaptionIframeReady(false);
+      } catch (err) {
+        console.error('[Preview] Failed to generate caption composition:', err);
+      }
+    }, 800);
+
+    return () => {
+      if (compositionGenTimer.current) clearTimeout(compositionGenTimer.current);
+    };
+  }, [jobId, transcript, captionSettings, aspectRatio]);
+
+  // Listen for 'caption-ready' message from iframe
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.data?.type === 'caption-ready') {
+        setCaptionIframeReady(true);
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
+
+  // Sync iframe immediately when it becomes ready (fixes settings not updating when paused)
+  useEffect(() => {
+    if (captionIframeReady && captionIframeRef.current?.contentWindow && videoRef.current) {
+      captionIframeRef.current.contentWindow.postMessage({ 
+        type: 'seek', 
+        time: videoRef.current.currentTime 
+      }, '*');
+    }
+  }, [captionIframeReady]);
+
+  // Cleanup blob URL on unmount
+  useEffect(() => {
+    return () => {
+      if (compositionUrl) URL.revokeObjectURL(compositionUrl);
+    };
+  }, []);
 
   const handleVideoCanPlay = () => {
     if (!isVideoReady) {
@@ -289,6 +384,7 @@ const CustomPreview = ({
         onDoubleClick={handleCanvasDoubleClick}
       >
         <div
+          ref={frameRef}
           className="relative flex items-center justify-center flex-shrink-0"
           style={{
             height: `${viewZoom * 100}%`,
@@ -444,14 +540,17 @@ const CustomPreview = ({
                       left: `${(captionSettings?.captionX ?? 0.5) * 100}%`,
                       top: `${(captionSettings?.captionY ?? 0.8) * 100}%`,
                       transform: "translate(-50%, -50%)",
-                      width: `${captionSettings?.captionWidth ?? 100}%`,
-                      height: `${(captionSettings?.fontSize ?? 32) * 2.5}px`,
+                      width: 'fit-content',
+                      maxWidth: `var(--caption-max-width, ${captionSettings?.captionWidth ?? 85}%)`,
+                      height: 'fit-content',
+                      // Proportional padding that doesn't break the resize math
+                      padding: `calc(var(--caption-font-size, ${captionSettings?.fontSize ?? 100}) * 0.08px) calc(var(--caption-font-size, ${captionSettings?.fontSize ?? 100}) * 0.12px)`,
                       // Dynamic Outline based on selection state
                       outline: activeElement === 'caption'
-                        ? (dragState?.type?.startsWith('caption') ? '4px solid #3b82f6' : '2px solid #3b82f6')
+                        ? (dragState?.type?.startsWith('caption') ? '4px solid #3b82f6' : '1.5px solid #3b82f6')
                         : 'none',
                       boxShadow: (activeElement === 'caption' && dragState?.type?.startsWith('caption')) ? '0 0 30px rgba(59, 130, 246, 0.6)' : 'none',
-                      borderRadius: '4px',
+                      borderRadius: '8px',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -459,13 +558,25 @@ const CustomPreview = ({
                     }}
                     onMouseDown={(e) => { setActiveElement('caption'); startCaptionDrag(e); }}
                   >
+                    {/* Invisible Text Renderer to force the container to perfectly hug the text */}
+                    <div style={{ opacity: 0, pointerEvents: 'none' }}>
+                      <CustomCaptions 
+                        transcript={transcript} 
+                        settings={captionSettings} 
+                        currentTimeMs={currentTimeMs} 
+                        frameHeight={frameHeight} 
+                        aspectRatio={aspectRatio}
+                        inlineMode={true} 
+                      />
+                    </div>
+
                     {/* Handles only visible when active */}
                     {activeElement === 'caption' && (
                       <>
-                        <div data-no-canvas-pan className="absolute -top-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-nw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
-                        <div data-no-canvas-pan className="absolute -top-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-ne-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
-                        <div data-no-canvas-pan className="absolute -bottom-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-sw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
-                        <div data-no-canvas-pan className="absolute -bottom-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-se-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={startCaptionResize} />
+                        <div data-no-canvas-pan className="absolute -top-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-nw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={(e) => startCaptionResize(e, 'nw')} />
+                        <div data-no-canvas-pan className="absolute -top-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-ne-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={(e) => startCaptionResize(e, 'ne')} />
+                        <div data-no-canvas-pan className="absolute -bottom-3 -left-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-sw-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={(e) => startCaptionResize(e, 'sw')} />
+                        <div data-no-canvas-pan className="absolute -bottom-3 -right-3 w-6 h-6 bg-white border-4 border-[#3b82f6] rounded-full cursor-se-resize pointer-events-auto shadow-2xl z-50 hover:scale-125 transition-transform" onMouseDown={(e) => startCaptionResize(e, 'se')} />
                       </>
                     )}
 
@@ -475,12 +586,24 @@ const CustomPreview = ({
                   </div>
                 )}
 
-                <CustomCaptions
-                  transcript={transcript}
-                  styleType="classic"
-                  settings={captionSettings}
-                  currentTimeMs={currentTimeMs}
-                />
+                {/* HyperFrames Caption Iframe Overlay */}
+                {compositionUrl && (
+                  <iframe
+                    ref={captionIframeRef}
+                    src={compositionUrl}
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      width: '100%',
+                      height: '100%',
+                      border: 'none',
+                      background: 'transparent',
+                      pointerEvents: 'none',
+                      zIndex: 40,
+                    }}
+                    allow="autoplay"
+                  />
+                )}
               </div>
             </div>
           )}

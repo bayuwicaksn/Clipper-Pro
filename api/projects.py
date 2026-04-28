@@ -138,7 +138,12 @@ async def list_clips(job_id: str):
                 
                 exported_files = []
                 if os.path.exists(exports_dir):
-                    exported_files = sorted([f for f in os.listdir(exports_dir) if f.endswith('.mp4')], reverse=True)
+                    # Filter out intermediate files like _reframed.mp4, _final.mp4, etc.
+                    intermediate_suffixes = ('_reframed.mp4', '_final.mp4', '_hooked.mp4', '_raw.mp4')
+                    exported_files = sorted([
+                        f for f in os.listdir(exports_dir) 
+                        if f.endswith('.mp4') and not f.endswith(intermediate_suffixes)
+                    ], reverse=True)
                 
                 clip['exported'] = len(exported_files) > 0
                 clip['exports'] = []

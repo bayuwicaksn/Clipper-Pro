@@ -110,7 +110,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   captionSettings: {
     presetId: 'default',
     fontName: 'Montserrat',
-    fontSize: 32,
+    fontSize: 100,
     primaryColor: '#FFFFFF',
     outlineColor: '#000000',
     outlineWidth: 8,

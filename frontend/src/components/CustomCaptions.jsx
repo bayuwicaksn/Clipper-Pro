@@ -1,7 +1,20 @@
 import React, { useMemo } from 'react';
 
-export const CustomCaptions = ({ transcript, styleType = "classic", settings, currentTimeMs }) => {
+
+
+export const CustomCaptions = ({ transcript, styleType = "classic", settings, currentTimeMs, frameHeight, aspectRatio = '9:16', inlineMode = false }) => {
   if (settings?.presetId === 'none') return null;
+
+  // Derive the original video height based on standard 1080p width to match backend's video_h
+  // If portrait (9:16), it's 1920. If landscape (16:9), it's 1080. If square, 1080.
+  const videoAspectRatio = aspectRatio;
+  let refHeight = 1920; // Default portrait
+  if (videoAspectRatio === '16:9') refHeight = 1080;
+  else if (videoAspectRatio === '1:1') refHeight = 1080;
+  else if (videoAspectRatio === '4:5') refHeight = 1350;
+
+  // Proportional scale factor — matches the exact scale of the preview frame
+  const scaleFactor = (frameHeight || refHeight) / refHeight;
 
   const switchEveryMs = useMemo(() => {
     const limit = settings?.lineLimit ?? 2;
@@ -12,49 +25,78 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
 
   const { pages } = useMemo(() => {
     const limit = settings?.lineLimit ?? 2;
-    const maxChars = limit === 1 ? 12 : (limit === 3 ? 40 : 25);
+    const fontSize = settings?.fontSize ?? 100;
+    const captionWidthPct = settings?.captionWidth ?? 85;
     
+    // Estimate max width in pixels for the container (relative to 1080 baseline)
+    const containerWidthPx = 1080 * (captionWidthPct / 100);
+    const maxChunkWidthPx = containerWidthPx * limit * 0.95; // 5% safety margin
+    
+    const isUppercase = settings?.isUppercase !== false;
+    const charWidthRatio = isUppercase ? 0.7 : 0.55;
+    const charWidthPx = fontSize * charWidthRatio;
+    const spaceWidthPx = fontSize * 0.3;
+
     const pagesResult = [];
     let currentTokens = [];
-    let currentChars = 0;
-    
+    let currentWidthPx = 0;
+
     if (!Array.isArray(transcript)) return { pages: [] };
 
     transcript.forEach((t) => {
-       const text = (t.text || t.word || "").trim();
-       if (!text) return;
-       
-       // Handle seconds to milliseconds conversion if needed
-       // OpenAI/Whisper usually return seconds (e.g. 1.2), while others use MS (e.g. 1200)
-       let start = t.startMs || t.fromMs || t.start;
-       let end = t.endMs || t.toMs || t.end;
-       
-       if (start !== undefined && start < 10000 && !t.startMs && !t.fromMs) start *= 1000;
-       if (end !== undefined && end < 10000 && !t.endMs && !t.toMs) end *= 1000;
+      let text = (t.text || t.word || "").trim();
+      if (!text) return;
 
-       const len = text.length;
-       if (currentChars + len > maxChars && currentTokens.length > 0) {
-           pagesResult.push({
-               startMs: currentTokens[0].startMs,
-               tokens: currentTokens
-           });
-           currentTokens = [];
-           currentChars = 0;
-       }
-       
-       currentTokens.push({ ...t, text: ` ${text}`, startMs: start, endMs: end }); 
-       currentChars += len + 1; 
+      // Handle seconds to milliseconds conversion if needed
+      let start = t.startMs || t.fromMs || t.start;
+      let end = t.endMs || t.toMs || t.end;
+
+      if (start !== undefined && start < 10000 && !t.startMs && !t.fromMs) start *= 1000;
+      if (end !== undefined && end < 10000 && !t.endMs && !t.toMs) end *= 1000;
+
+      const rawText = text;
+      if (isUppercase) text = text.toUpperCase();
+      
+      const wordWidthPx = text.length * charWidthPx;
+      let forceBreak = false;
+
+      if (currentTokens.length > 0) {
+        const prevToken = currentTokens[currentTokens.length - 1];
+        const pauseDurationMs = start - prevToken.endMs;
+        
+        // 1. Break on speech pause > 400ms
+        if (pauseDurationMs > 400) forceBreak = true;
+        
+        // 2. Break on end of sentence or clause
+        const prevText = prevToken.rawText || prevToken.text;
+        if (/[.!?,]$/.test(prevText.trim())) forceBreak = true;
+        
+        // 3. Break on visual width limit
+        if (currentWidthPx + spaceWidthPx + wordWidthPx > maxChunkWidthPx) forceBreak = true;
+      }
+
+      if (forceBreak && currentTokens.length > 0) {
+        pagesResult.push({
+          startMs: currentTokens[0].startMs,
+          tokens: currentTokens
+        });
+        currentTokens = [];
+        currentWidthPx = 0;
+      }
+
+      currentTokens.push({ ...t, text: ` ${rawText}`, rawText, startMs: start, endMs: end });
+      currentWidthPx += wordWidthPx + (currentTokens.length > 1 ? spaceWidthPx : 0);
     });
-    
+
     if (currentTokens.length > 0) {
-       pagesResult.push({
-           startMs: currentTokens[0].startMs,
-           tokens: currentTokens
-       });
+      pagesResult.push({
+        startMs: currentTokens[0].startMs,
+        tokens: currentTokens
+      });
     }
-    
+
     return { pages: pagesResult };
-  }, [transcript, settings?.lineLimit]);
+  }, [transcript, settings?.lineLimit, settings?.fontSize, settings?.captionWidth, settings?.isUppercase]);
 
   // Find active page
   const activePage = pages.find((page, index) => {
@@ -69,10 +111,10 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
   const LEAD_TIME_MS = 80;
   const absoluteTimeMs = currentTimeMs + LEAD_TIME_MS;
 
-  const verticalMargin = settings?.verticalMargin ?? 150;
+  // ── Extract settings with defaults (matching caption_generator.py) ──
   const primaryColor = settings?.primaryColor ?? "#FFFFFF";
-  const highlightColorGreen = settings?.highlightColorGreen ?? "#04f827"; 
-  const highlightColorYellow = settings?.highlightColorYellow ?? "#fffd03"; 
+  const highlightColorGreen = settings?.highlightColorGreen ?? "#04f827";
+  const highlightColorYellow = settings?.highlightColorYellow ?? "#fffd03";
   const outlineColor = settings?.outlineColor ?? "#000000";
   const outlineWidth = settings?.outlineWidth ?? 8;
   const fontSize = settings?.fontSize ?? 100;
@@ -81,7 +123,7 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
   const isItalic = settings?.isItalic || false;
   const isUnderline = settings?.isUnderline || false;
   const isUppercase = settings?.isUppercase !== false;
-  
+
   const shadowEnabled = settings?.shadowEnabled !== false;
   const shadowColor = settings?.shadowColor ?? "#000000";
   const shadowX = settings?.shadowOffsetX ?? 2;
@@ -90,22 +132,20 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
 
   const autoHighlight = settings?.autoHighlight !== false;
 
+  // Support dynamic overriding via CSS variables for smooth interaction/resizing
+  const currentFontSize = `var(--caption-font-size, ${fontSize})`;
+  const scaledFontSize = `calc(${currentFontSize} * ${scaleFactor})`;
+  const scaledFontSizePx = `calc(${scaledFontSize} * 1px)`;
+  const scaledOutline = (fontSize * outlineWidth) / 1000 * scaleFactor;
+  const scaledShadowX = shadowX * scaleFactor;
+  const scaledShadowY = shadowY * scaleFactor;
+  const scaledShadowBlur = shadowBlur * scaleFactor;
+  const scaledMargin = Math.max(2, 8 * scaleFactor);
+
   const activeIndex = (() => {
-    const strictIndex = activePage.tokens.findIndex((t) =>
+    return activePage.tokens.findIndex((t) =>
       absoluteTimeMs >= t.startMs && absoluteTimeMs < t.endMs
     );
-    if (strictIndex !== -1) return strictIndex;
-    let closestIndex = 0;
-    let minDistance = Infinity;
-    activePage.tokens.forEach((t, idx) => {
-      const center = (t.startMs + t.endMs) / 2;
-      const distance = Math.abs(absoluteTimeMs - center);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestIndex = idx;
-      }
-    });
-    return closestIndex;
   })();
 
   const captionX = settings?.captionX ?? 0.5;
@@ -113,35 +153,38 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
 
   return (
     <div
-      className="text-center absolute"
+      className={inlineMode ? "text-center" : "text-center absolute"}
       style={{
-        left: `${captionX * 100}%`,
-        top: `${captionY * 100}%`,
-        transform: "translate(-50%, -50%)",
-        width: `${settings?.captionWidth ?? 85}%`,
+        left: inlineMode ? undefined : `${captionX * 100}%`,
+        top: inlineMode ? undefined : `${captionY * 100}%`,
+        transform: inlineMode ? undefined : "translate(-50%, -50%)",
+        width: inlineMode ? 'fit-content' : `${settings?.captionWidth ?? 85}%`,
+        maxWidth: inlineMode ? '100%' : undefined,
+        height: inlineMode ? 'fit-content' : undefined,
         lineHeight: 1.0,
         textWrap: "balance",
         perspective: "1000px",
         pointerEvents: 'none',
-        zIndex: 50
+        zIndex: inlineMode ? undefined : 50
       }}
     >
       {activePage.tokens.map((token, i) => {
         const isActive = i === activeIndex;
-        
-        const isGreenKeyword = autoHighlight && /^(sukses|kaya|uang|viral|trending|presiden)/i.test(token.text.trim());
-        const isYellowKeyword = autoHighlight && /^(penting|rahasia|masalah|solusi|gila|keren|tips|trik|cara)/i.test(token.text.trim());
-        
+
+        // Auto-highlight regex — synced with caption_generator.py GREEN_REGEX / YELLOW_REGEX
+        const isGreenKeyword = autoHighlight && /^(sukses|kaya|uang|viral|trending|presiden|milyar|triliun|cuan)/i.test(token.text.trim());
+        const isYellowKeyword = autoHighlight && /^(penting|rahasia|masalah|solusi|gila|keren|tips|trik|cara|fakta|bukti)/i.test(token.text.trim());
+
         const isPast = i < activeIndex;
         const isFuture = i > activeIndex;
-        
+
         // Pseudo-spring animation
         const timeSinceActive = Math.max(0, absoluteTimeMs - (token.fromMs || token.startMs));
         const progress = Math.min(1, timeSinceActive / 150); // 150ms animation duration
-        
+
         const isIntense = ['explosive', 'hype', 'vibrant'].includes(styleType);
         const isBouncy = ['explosive', 'hype', 'vibrant', 'model', 'fast'].includes(styleType);
-        
+
         let color = primaryColor;
         let opacity = 1;
 
@@ -151,7 +194,7 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
           color = primaryColor;
         } else if (isFuture) {
           color = primaryColor;
-          opacity = isIntense ? 0.6 : 0.8; 
+          opacity = isIntense ? 0.6 : 0.8;
         }
 
         if (!isActive) {
@@ -164,28 +207,28 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
         let rotate = 0;
 
         if (isActive) {
-           if (isBouncy) {
-              scale = 1 + (0.25 * Math.sin(progress * Math.PI)); // Bouncy effect
-              translateY = -12 * Math.sin(progress * Math.PI);
-           } else {
-              scale = 1 + (0.1 * progress);
-              translateY = -4 * progress;
-           }
-           
-           if (isIntense) {
-              rotate = (i % 2 === 0 ? -4 : 4) * progress;
-           }
+          if (isBouncy) {
+            scale = 1 + (0.25 * Math.sin(progress * Math.PI)); // Bouncy effect
+            translateY = -12 * Math.sin(progress * Math.PI);
+          } else {
+            scale = 1 + (0.1 * progress);
+            translateY = -4 * progress;
+          }
+
+          if (isIntense) {
+            rotate = (i % 2 === 0 ? -4 : 4) * progress;
+          }
         }
 
-        let shadow = shadowEnabled 
-          ? `${shadowX}px ${shadowY}px ${shadowBlur}px ${shadowColor}` 
+        let shadow = shadowEnabled
+          ? `${scaledShadowX}px ${scaledShadowY}px ${scaledShadowBlur}px ${shadowColor}`
           : "none";
-          
+
         if (isActive && shadowEnabled && isIntense) {
-           shadow = `${shadow}, 0 0 15px ${color}`;
+          shadow = `${shadow}, 0 0 ${15 * scaleFactor}px ${color}`;
         }
-        
-        let stroke = `${(fontSize * outlineWidth) / 1000}px ${outlineColor}`;
+
+        let stroke = `${scaledOutline}px ${outlineColor}`;
 
         return (
           <span
@@ -193,7 +236,7 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
             className={`inline-block tracking-tighter ${isUppercase ? 'uppercase' : ''}`}
             style={{
               fontFamily: `"${fontName}", sans-serif`,
-              fontSize: `${fontSize}px`,
+              fontSize: scaledFontSizePx,
               fontWeight: fontWeight === 'Black' ? 900 : (fontWeight === 'Bold' ? 700 : (fontWeight === 'Medium' ? 500 : 400)),
               fontStyle: isItalic ? 'italic' : 'normal',
               textDecoration: isUnderline ? 'underline' : 'none',
@@ -203,7 +246,7 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
               WebkitTextStroke: stroke,
               transform: `scale(${scale}) translateY(${translateY}px) rotate(${rotate}deg)`,
               transformOrigin: "center center",
-              margin: "0 8px",
+              margin: `0 ${scaledMargin}px`,
               transition: "color 0.1s ease-out, opacity 0.1s ease-out",
               willChange: "transform, color, opacity",
             }}

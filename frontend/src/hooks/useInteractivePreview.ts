@@ -11,6 +11,8 @@ interface DragState {
   initialWidth?: number;
   initialSize?: number;
   handle?: string;
+  rect?: DOMRect;
+  containerRect?: DOMRect;
 }
 
 export function useInteractivePreview(
@@ -131,15 +133,81 @@ export function useInteractivePreview(
           setCaptionSettings((prev: any) => ({ ...prev, captionX: finalX, captionY: newY }));
 
         } else if (dragState.type === 'caption-resize') {
-          const wSensitivity = 0.2;
-          const fSensitivity = 0.5;
-          const dw = dx * wSensitivity;
-          const df = -dy * fSensitivity;
+          if (!dragState.rect || !dragState.containerRect || !dragState.handle) return;
+          
+          const rect = dragState.rect;
+          const container = dragState.containerRect;
+          const mx = e.clientX;
+          
+          let fixedX = 0;
+          let fixedY = 0;
+          let scale = 1;
 
-          const newWidth = Math.max(10, (dragState.initialWidth || 0) + dw);
-          const newSize = Math.max(10, Math.min(300, (dragState.initialSize || 0) + df));
+          // Identify the fixed anchor point based on the handle being dragged
+          if (dragState.handle === 'nw') {
+            fixedX = rect.right;
+            fixedY = rect.bottom;
+            scale = (fixedX - mx) / rect.width;
+          } else if (dragState.handle === 'ne') {
+            fixedX = rect.left;
+            fixedY = rect.bottom;
+            scale = (mx - fixedX) / rect.width;
+          } else if (dragState.handle === 'sw') {
+            fixedX = rect.right;
+            fixedY = rect.top;
+            scale = (fixedX - mx) / rect.width;
+          } else if (dragState.handle === 'se') {
+            fixedX = rect.left;
+            fixedY = rect.top;
+            scale = (mx - fixedX) / rect.width;
+          }
 
-          setCaptionSettings((prev: any) => ({ ...prev, fontSize: Math.round(newSize), captionWidth: Math.round(newWidth) }));
+          // Enforce minimum reasonable scale
+          scale = Math.max(0.1, scale);
+
+          const newWidthPx = rect.width * scale;
+          const newHeightPx = rect.height * scale;
+
+          let newCenterX = 0;
+          let newCenterY = 0;
+
+          if (dragState.handle === 'nw') {
+            newCenterX = fixedX - newWidthPx / 2;
+            newCenterY = fixedY - newHeightPx / 2;
+          } else if (dragState.handle === 'ne') {
+            newCenterX = fixedX + newWidthPx / 2;
+            newCenterY = fixedY - newHeightPx / 2;
+          } else if (dragState.handle === 'sw') {
+            newCenterX = fixedX - newWidthPx / 2;
+            newCenterY = fixedY + newHeightPx / 2;
+          } else if (dragState.handle === 'se') {
+            newCenterX = fixedX + newWidthPx / 2;
+            newCenterY = fixedY + newHeightPx / 2;
+          }
+
+          // Convert absolute center to relative captionX, captionY
+          const relX = (newCenterX - container.left) / container.width;
+          const relY = (newCenterY - container.top) / container.height;
+
+          const newSize = (dragState.initialSize || 100) * scale;
+          const newWidthPct = (dragState.initialWidth || 85) * scale;
+
+          // DIRECT DOM UPDATE for instant feedback
+          if (captionOverlayRef.current) {
+            captionOverlayRef.current.style.left = `${relX * 100}%`;
+            captionOverlayRef.current.style.top = `${relY * 100}%`;
+            captionOverlayRef.current.style.setProperty('--caption-font-size', String(newSize));
+            captionOverlayRef.current.style.setProperty('--caption-max-width', `${newWidthPct}%`);
+          }
+
+          // Sync back to React state (this will eventually trigger re-render, but DOM is already updated)
+          setCaptionSettings((prev: any) => ({ 
+            ...prev, 
+            captionX: relX, 
+            captionY: relY,
+            fontSize: Math.round(newSize), 
+            captionWidth: Math.round(newWidthPct) 
+          }));
         }
       } else if (isCanvasPanning) {
         setPanX(canvasPanStart.current.panX + (e.clientX - canvasPanStart.current.x));
@@ -150,6 +218,10 @@ export function useInteractivePreview(
 
   useEffect(() => {
     const handleMouseUp = () => {
+      if (captionOverlayRef.current) {
+        captionOverlayRef.current.style.removeProperty('--caption-font-size');
+        captionOverlayRef.current.style.removeProperty('--caption-max-width');
+      }
       setDragState(null);
       setIsCanvasPanning(false);
       setIsSnappedCaptionX(false);

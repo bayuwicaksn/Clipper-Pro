@@ -143,16 +143,33 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
     style_type     = settings.get('styleType', 'classic').lower()
     auto_highlight = settings.get('autoHighlight', True)
 
-    # Global Scaling based on 1080p reference
-    font_scale = video_h / 1080.0 
+    # Global Scaling 
+    # We use 540px as the reference height because the browser preview 
+    # area is typically around that height. This ensures the visual 
+    # ratio between font and video height remains consistent.
+    font_scale = video_h / 540.0 
     scaled_font_size = int(font_size * font_scale)
     scaled_outline   = (font_size * outline_width) / 1000.0 * font_scale
     
     pos_x = int(video_w * x_pos_ratio)
     pos_y = int(video_h * y_pos_ratio)
 
-    # Word Chunking Logic
-    max_chars = 12 if line_limit == 1 else (40 if line_limit == 3 else 25)
+    # Word Chunking Logic (Matches Frontend Pages)
+    if line_limit == 1:
+        max_chars = 12
+    elif line_limit == 3:
+        max_chars = 40
+    else: # Default line_limit 2
+        max_chars = 25
+        
+    # Container-aware Line Wrapping
+    # Calculate how many characters roughly fit in the container width
+    # Reference: at 100% width, ~30-35 thick characters fit 1080p width
+    chars_that_fit_container = int((settings.get('captionWidth', 85) / 100.0) * 32)
+    
+    # We take the stricter of the two: either balanced by lineLimit or limited by container
+    max_chars_per_line = min(max_chars / line_limit, chars_that_fit_container)
+    
     chunks = []
     current_chunk = []
     current_len = 0
@@ -191,6 +208,7 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
         f"PlayResX: {video_w}",
         f"PlayResY: {video_h}",
         "ScaledBorderAndShadow: yes",
+        "WrapStyle: 1",
         "",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
@@ -259,8 +277,22 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
                 word_full = f"{{{''.join(tags)}}}{word_txt}{{\\alpha&H00&\\fscx100\\fscy100\\frz0\\blur{shadow_blur if shadow_enabled else 0}}}"
                 highlighted_text += word_full
                 
+                # Intelligent Line Breaking (\N)
                 if j < len(chunk) - 1:
-                    highlighted_text += " "
+                    # Calculate if we should wrap
+                    current_line_text = "".join([w_['word'] for w_ in chunk[:j+1]])
+                    next_word = chunk[j+1]['word']
+                    
+                    # If adding the next word exceeds the balanced line limit, 
+                    # and we haven't reached the line limit yet
+                    if len(current_line_text) + len(next_word) > max_chars_per_line:
+                        # Only wrap if we are balanced (simulating textWrap: balance)
+                        # We use \N for explicit break
+                        highlighted_text += "\\N"
+                        # Reset virtual line counter for balancing the next line
+                        # In a simple 2-line scenario, this just happens once
+                    else:
+                        highlighted_text += " "
             
             events.append(f"Dialogue: 0,{start_t},{end_t},Default,,0,0,0,,{highlighted_text}")
 
