@@ -85,7 +85,7 @@ def get_face_center_x(clip_path, timestamp_sec):
     cap.release()
     return 0.5
 
-def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None, clip_index=0, total_clips=1, custom_crop_x=None, segments=None, aspect_ratio='9:16'):
+def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None, clip_index=0, total_clips=1, custom_crop_x=None, segments=None, aspect_ratio='9:16', auto_background_enabled=True):
     """
     Convert a 16:9 clip to a target aspect ratio with face tracking.
     """
@@ -111,7 +111,7 @@ def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None, 
     else:
         base = 40
 
-    _apply_crop(clip_path, output_path, crop_positions, target_ratio, progress_callback, base)
+    _apply_crop(clip_path, output_path, crop_positions, target_ratio, progress_callback, base, auto_background_enabled=auto_background_enabled)
 
 
 def _track_with_override(clip_path, custom_crop_x_pct, target_ratio):
@@ -336,7 +336,7 @@ def _track_with_mediapipe(clip_path, target_ratio):
     return positions
 
 
-def _apply_crop(clip_path, output_path, positions, target_ratio, progress_callback=None, base_pct=40):
+def _apply_crop(clip_path, output_path, positions, target_ratio, progress_callback=None, base_pct=40, auto_background_enabled=True):
     """Apply crop positions using OpenCV for processing, GPU FFmpeg for encoding."""
     video_enc = get_ffmpeg_video_encode_args()
 
@@ -435,10 +435,12 @@ def _apply_crop(clip_path, output_path, positions, target_ratio, progress_callba
         cx1 = max(0, -crop_x)
         cx2 = cx1 + (x2 - x1)
         
-        # Create blurred background
-        bg = cv2.resize(frame, (cw, ch), interpolation=cv2.INTER_LINEAR)
-        bg = cv2.GaussianBlur(bg, (99, 99), 30)
-        bg = cv2.convertScaleAbs(bg, alpha=0.5, beta=0) # Dim the background
+        if auto_background_enabled:
+            bg = cv2.resize(frame, (cw, ch), interpolation=cv2.INTER_LINEAR)
+            bg = cv2.GaussianBlur(bg, (99, 99), 30)
+            bg = cv2.convertScaleAbs(bg, alpha=0.5, beta=0) # Dim the background
+        else:
+            bg = np.zeros((ch, cw, 3), dtype=np.uint8)
         
         canvas = bg
         if y1 < y2 and x1 < x2:
@@ -519,4 +521,3 @@ def detect_scenes(video_path, threshold=25.0, progress_callback=None):
     cap.release()
     print(f"  [Scene Detection] Completed. Found {len(cuts)} cuts.")
     return cuts
-

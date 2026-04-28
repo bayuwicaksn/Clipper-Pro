@@ -25,6 +25,22 @@ export default function ClipperView({
   } = useEditorStore();
 
   const activeClip = clips[activeClipIndex];
+  const activeClipStart = activeClip?.start_time ? timestampToSeconds(activeClip.start_time) : 0;
+  const activeClipEnd = activeClip?.end_time ? timestampToSeconds(activeClip.end_time) : 60;
+  const autoBackgroundEnabled = activeClip?.auto_background_enabled !== false;
+
+  const setAutoBackgroundEnabled = (enabled) => {
+    setClips(prev => {
+      const updated = [...prev];
+      if (updated[activeClipIndex]) {
+        updated[activeClipIndex] = {
+          ...updated[activeClipIndex],
+          auto_background_enabled: enabled
+        };
+      }
+      return updated;
+    });
+  };
 
   const handleSegmentBoundsChange = (segmentIndex, nextStart, nextEnd) => {
     setClips(prev => {
@@ -50,12 +66,13 @@ export default function ClipperView({
           appMode="clipper"
           jobId={project?.id}
           aspectRatio={aspectRatio}
-          startSecs={0}
-          endSecs={activeClip?.end_time ? timestampToSeconds(activeClip.end_time) : 60}
+          startSecs={activeClipStart}
+          endSecs={activeClipEnd}
           currentTime={currentTime}
           cropX={activeClip?.custom_crop_x || 0.5}
           cropY={0.5}
           cropZ={1.0}
+          autoBackgroundEnabled={autoBackgroundEnabled}
           setCropX={(newX) => {
             const updated = [...clips];
             updated[activeClipIndex] = { ...updated[activeClipIndex], custom_crop_x: newX };
@@ -72,6 +89,17 @@ export default function ClipperView({
       <div className="nle-bottom-panel bg-card border-t border-border h-64 flex flex-col flex-shrink-0">
         <div className="nle-player-controls nle-player-controls--minimal">
           <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+              <span>Auto Background</span>
+              <button
+                type="button"
+                onClick={() => setAutoBackgroundEnabled(!autoBackgroundEnabled)}
+                className={`w-[42px] h-[22px] rounded-full p-0.5 transition-colors ${autoBackgroundEnabled ? 'bg-primary' : 'bg-muted'}`}
+                aria-pressed={autoBackgroundEnabled}
+              >
+                <span className={`block size-[18px] rounded-full bg-background shadow transition-transform ${autoBackgroundEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </label>
             <div className="nle-player-pill">
               CLIPPER MODE - CLIP {activeClipIndex + 1}
             </div>
@@ -92,8 +120,8 @@ export default function ClipperView({
             clip={activeClip}
             segments={[{
               id: 'clipper-main',
-              start: Math.max(0, activeClip?.start_time ? timestampToSeconds(activeClip.start_time) : 0),
-              end: Math.max(1, activeClip?.end_time ? timestampToSeconds(activeClip.end_time) : 60),
+              start: Math.max(0, activeClipStart),
+              end: Math.max(1, activeClipEnd),
               crop_x: 0.5
             }]}
             appMode="clipper"

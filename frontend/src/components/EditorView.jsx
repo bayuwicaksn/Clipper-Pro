@@ -13,6 +13,27 @@ import { timestampToSeconds } from "@/utils/time";
 
 import { useEditorStore } from '@/store/editorStore';
 
+const PLAYER_SIZE_STORAGE_KEY = 'nle_editor_player_panel_size';
+const MIN_PLAYER_SIZE = 0.25;
+const MAX_PLAYER_SIZE = 4.0;
+const DEFAULT_PLAYER_SIZE = 1.0;
+
+function clampPlayerSize(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return DEFAULT_PLAYER_SIZE;
+  return Math.max(MIN_PLAYER_SIZE, Math.min(MAX_PLAYER_SIZE, numeric));
+}
+
+function getStoredPlayerSize() {
+  if (typeof window === 'undefined') return DEFAULT_PLAYER_SIZE;
+  return clampPlayerSize(window.localStorage.getItem(PLAYER_SIZE_STORAGE_KEY));
+}
+
+function saveStoredPlayerSize(value) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(PLAYER_SIZE_STORAGE_KEY, String(clampPlayerSize(value)));
+}
+
 export default function EditorView({
   playerRef,
   setIsPlayerReady,
@@ -27,7 +48,7 @@ export default function EditorView({
 }) {
   const {
     project,
-    clips,
+    clips, setClips,
     activeClipIndex,
     segments, setSegments,
     activeSegmentIndex, setActiveSegmentIndex,
@@ -44,6 +65,21 @@ export default function EditorView({
 
   const activeClip = clips[activeClipIndex];
   const activeSegment = segments[activeSegmentIndex];
+  const editorPlayerSize = clampPlayerSize(activeSegment?.crop_z ?? getStoredPlayerSize());
+  const autoBackgroundEnabled = activeClip?.auto_background_enabled !== false;
+
+  const setAutoBackgroundEnabled = (enabled) => {
+    setClips(prev => {
+      const updated = [...prev];
+      if (updated[activeClipIndex]) {
+        updated[activeClipIndex] = {
+          ...updated[activeClipIndex],
+          auto_background_enabled: enabled
+        };
+      }
+      return updated;
+    });
+  };
 
   function NavItem({ id, icon: Icon, label, active, onClick }) {
     return (
@@ -75,7 +111,8 @@ export default function EditorView({
                 endSecs={activeSegment.end}
                 cropX={activeSegment.crop_x || 0.5}
                 cropY={activeSegment.crop_y || 0.5}
-                cropZ={activeSegment.crop_z || 1.0}
+                cropZ={editorPlayerSize}
+                autoBackgroundEnabled={autoBackgroundEnabled}
                 setCropX={(newX) => {
                   const newSegs = [...segments];
                   if (newSegs[activeSegmentIndex]) newSegs[activeSegmentIndex].crop_x = newX;
@@ -87,8 +124,10 @@ export default function EditorView({
                   setSegments(newSegs);
                 }}
                 setCropZ={(newZ) => {
+                  const safeZ = clampPlayerSize(newZ);
+                  saveStoredPlayerSize(safeZ);
                   const newSegs = [...segments];
-                  if (newSegs[activeSegmentIndex]) newSegs[activeSegmentIndex].crop_z = newZ;
+                  if (newSegs[activeSegmentIndex]) newSegs[activeSegmentIndex].crop_z = safeZ;
                   setSegments(newSegs);
                 }}
                 onSegmentEnd={handleSegmentEndPlayback}
@@ -134,6 +173,17 @@ export default function EditorView({
           </div>
 
           <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+              <span>Auto Background</span>
+              <button
+                type="button"
+                onClick={() => setAutoBackgroundEnabled(!autoBackgroundEnabled)}
+                className={`w-[42px] h-[22px] rounded-full p-0.5 transition-colors ${autoBackgroundEnabled ? 'bg-primary' : 'bg-muted'}`}
+                aria-pressed={autoBackgroundEnabled}
+              >
+                <span className={`block size-[18px] rounded-full bg-background shadow transition-transform ${autoBackgroundEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+              </button>
+            </label>
             <div className="font-mono text-xs tabular-nums">
               <span className="text-foreground font-bold">{new Date(Math.max(0, currentTime) * 1000).toISOString().substr(11, 8).replace(/^00:/, '')}</span>
               <span className="text-muted-foreground/30 mx-2">/</span>

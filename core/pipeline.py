@@ -133,6 +133,7 @@ class Pipeline:
                     'tags': h.get('tags', []),
                     'has_hook': self.config.get('enable_hook', True),
                     'has_captions': self.config.get('enable_captions', True),
+                    'auto_background_enabled': True,
                     'extract': h.get('extract', '') # Store transcript extract
                 }
                 clips_result.append(clip_data)
@@ -167,6 +168,7 @@ class Pipeline:
             if custom_end: clip_metadata['end_time'] = custom_end
             if custom_crop_x is not None: clip_metadata['custom_crop_x'] = custom_crop_x
             if segments: clip_metadata['segments'] = segments
+            clip_metadata['auto_background_enabled'] = clip_metadata.get('auto_background_enabled', True)
 
             # Determine which clip index to use for directory
             idx = clip_index if clip_index is not None else clip_metadata.get('clip_index', 0)
@@ -239,6 +241,7 @@ class Pipeline:
 
         segments = highlight.get('segments')
         custom_crop_x = highlight.get('custom_crop_x')
+        auto_background_enabled = highlight.get('auto_background_enabled', True)
 
         reframe_clip(
             raw_clip_path, reframed_path,
@@ -247,7 +250,8 @@ class Pipeline:
             clip_index=index, total_clips=total,
             custom_crop_x=custom_crop_x,
             segments=segments,
-            aspect_ratio=aspect_ratio
+            aspect_ratio=aspect_ratio,
+            auto_background_enabled=auto_background_enabled
         )
 
         if os.path.exists(reframed_path) and os.path.getsize(reframed_path) > 0:
@@ -396,6 +400,7 @@ class Pipeline:
             'tags': highlight.get('tags', []),
             'has_hook': self.config.get('enable_hook', True),
             'has_captions': self.config.get('enable_captions', True),
+            'auto_background_enabled': highlight.get('auto_background_enabled', True),
         }
 
     def _save_metadata(self, clips, video_metadata):

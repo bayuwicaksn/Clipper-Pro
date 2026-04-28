@@ -26,6 +26,7 @@ class ExportRequest(BaseModel):
     caption_settings: Optional[Dict[str, Any]] = None
     transcript: Optional[List[Dict[str, Any]]] = None
     aspect_ratio: str = '9:16'
+    auto_background_enabled: bool = True
 
 class ReprocessRequest(BaseModel):
     url: str = ''

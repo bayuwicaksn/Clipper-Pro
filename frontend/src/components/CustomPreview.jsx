@@ -18,6 +18,7 @@ const CustomPreview = ({
   cropX,
   cropY,
   cropZ,
+  autoBackgroundEnabled = true,
   setCropX,
   setCropY,
   setCropZ,
@@ -42,6 +43,7 @@ const CustomPreview = ({
   const onTimeUpdate = (time) => setCurrentTime(time);
   const jobId = project?.id;
   const videoRef = useRef(null);
+  const backgroundVideoRef = useRef(null);
   const captionOverlayRef = useRef(null);
   const aspectRatioBoxRef = useRef(null);
   const frameRef = useRef(null);
@@ -154,12 +156,19 @@ const CustomPreview = ({
   useEffect(() => {
     if (playerRef) {
       playerRef.current = {
-        play: () => videoRef.current?.play(),
-        pause: () => videoRef.current?.pause(),
+        play: () => {
+          backgroundVideoRef.current?.play().catch(() => {});
+          videoRef.current?.play();
+        },
+        pause: () => {
+          backgroundVideoRef.current?.pause();
+          videoRef.current?.pause();
+        },
         seekTo: (frame) => {
           if (videoRef.current) {
             const timeInSeconds = startSecs + (frame / 30);
             videoRef.current.currentTime = timeInSeconds;
+            if (backgroundVideoRef.current) backgroundVideoRef.current.currentTime = timeInSeconds;
             listenersRef.current['frameupdate']?.forEach(cb => cb());
           }
         },
@@ -185,8 +194,13 @@ const CustomPreview = ({
   useEffect(() => {
     if (!videoRef.current) return;
     if (playing) {
+      if (backgroundVideoRef.current) {
+        backgroundVideoRef.current.currentTime = videoRef.current.currentTime;
+        backgroundVideoRef.current.play().catch(() => {});
+      }
       videoRef.current.play().catch(e => console.warn("Play interrupted", e));
     } else {
+      backgroundVideoRef.current?.pause();
       videoRef.current.pause();
     }
   }, [playing]);
@@ -195,6 +209,7 @@ const CustomPreview = ({
   useEffect(() => {
     if (seekRequested !== undefined && videoRef.current) {
       videoRef.current.currentTime = seekRequested;
+      if (backgroundVideoRef.current) backgroundVideoRef.current.currentTime = seekRequested;
       listenersRef.current['frameupdate']?.forEach(cb => cb());
     }
   }, [seekRequested]);
@@ -218,6 +233,9 @@ const CustomPreview = ({
         setCurrentTimeMs(time * 1000);
         onTimeUpdate(time);
         listenersRef.current['frameupdate']?.forEach(cb => cb());
+        if (backgroundVideoRef.current && Math.abs(backgroundVideoRef.current.currentTime - time) > 0.08) {
+          backgroundVideoRef.current.currentTime = time;
+        }
 
         // Sync caption iframe via postMessage
         if (captionIframeRef.current?.contentWindow) {
@@ -226,6 +244,7 @@ const CustomPreview = ({
 
         if (time >= endSecs && playing) {
           videoRef.current.pause();
+          backgroundVideoRef.current?.pause();
           onSegmentEnd();
         }
       }
@@ -238,6 +257,7 @@ const CustomPreview = ({
       if (videoRef.current) {
         setCurrentTimeMs(videoRef.current.currentTime * 1000);
         listenersRef.current['frameupdate']?.forEach(cb => cb());
+        if (backgroundVideoRef.current) backgroundVideoRef.current.currentTime = videoRef.current.currentTime;
         // Sync caption iframe when paused too
         if (captionIframeRef.current?.contentWindow) {
           captionIframeRef.current.contentWindow.postMessage({ type: 'seek', time: videoRef.current.currentTime }, '*');
@@ -264,7 +284,7 @@ const CustomPreview = ({
 
   // Generate caption composition (debounced)
   useEffect(() => {
-    if (!jobId || !transcript?.length || captionSettings?.presetId === 'none') {
+    if (appMode === 'clipper' || !jobId || !transcript?.length || captionSettings?.presetId === 'none') {
       setCompositionUrl(null);
       setCaptionIframeReady(false);
       return;
@@ -289,7 +309,7 @@ const CustomPreview = ({
     return () => {
       if (compositionGenTimer.current) clearTimeout(compositionGenTimer.current);
     };
-  }, [jobId, transcript, captionSettings, aspectRatio]);
+  }, [appMode, jobId, transcript, captionSettings, aspectRatio]);
 
   // Listen for 'caption-ready' message from iframe
   useEffect(() => {
@@ -324,6 +344,7 @@ const CustomPreview = ({
       setIsVideoReady(true);
       if (videoRef.current) {
         videoRef.current.currentTime = Math.max(0, startSecs);
+        if (backgroundVideoRef.current) backgroundVideoRef.current.currentTime = Math.max(0, startSecs);
       }
     }
   };
@@ -332,14 +353,16 @@ const CustomPreview = ({
   const safeZ = cropZ || 1;
   const safeX = cropX || 0.5;
   const safeY = cropY || 0.5;
+  const isClipperMode = appMode === 'clipper';
 
   const videoTransform = appMode === 'editor'
     ? `scale(${safeZ}) translate(${(0.5 - safeX) * 100}%, ${(0.5 - safeY) * 100}%)`
     : 'none';
 
   return (
-    <div className="nle-player-container relative w-full h-full bg-[#1a1a1a] rounded-xl overflow-hidden group shadow-2xl">
+    <div className={`nle-player-container relative w-full h-full overflow-hidden group ${isClipperMode ? 'bg-black rounded-none shadow-none' : 'bg-[#1a1a1a] rounded-xl shadow-2xl'}`}>
       {/* Zoom Controls Overlay - FIXED (Outside scroll area) */}
+      {!isClipperMode && (
       <div className="absolute bottom-6 right-6 z-[100] flex items-center gap-1 bg-[#121212]/90 backdrop-blur-md border border-white/10 p-1.5 rounded-full shadow-2xl pointer-events-auto transition-opacity opacity-0 group-hover:opacity-100">
         <button
           onClick={() => handleZoomChange(Math.max(0.25, viewZoom - 0.25))}
@@ -375,34 +398,61 @@ const CustomPreview = ({
           <Plus size={16} />
         </button>
       </div>
+      )}
 
       {/* CANVAS AREA - Figma-style Drag to Pan */}
       <div
         ref={scrollAreaRef}
-        className={`w-full h-full overflow-hidden flex items-center justify-center p-8 scrollbar-none select-none ${isCanvasPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
-        onMouseDown={startCanvasPan}
-        onDoubleClick={handleCanvasDoubleClick}
+        className={`w-full h-full overflow-hidden flex items-center justify-center scrollbar-none select-none ${isClipperMode ? 'p-0 cursor-default' : `p-8 ${isCanvasPanning ? 'cursor-grabbing' : 'cursor-grab'}`}`}
+        onMouseDown={isClipperMode ? undefined : startCanvasPan}
+        onDoubleClick={isClipperMode ? undefined : handleCanvasDoubleClick}
       >
         <div
           ref={frameRef}
           className="relative flex items-center justify-center flex-shrink-0"
           style={{
-            height: `${viewZoom * 100}%`,
-            aspectRatio: (aspectRatio === '9:16' || aspectRatio === '4:5' || aspectRatio === '1:1')
+            width: isClipperMode ? '100%' : 'auto',
+            height: isClipperMode ? '100%' : `${viewZoom * 100}%`,
+            aspectRatio: isClipperMode
+              ? (videoAspectRatio || '16/9')
+              : (aspectRatio === '9:16' || aspectRatio === '4:5' || aspectRatio === '1:1')
               ? aspectRatio.replace(':', '/')
               : '16/9',
-            minHeight: viewZoom === 1.0 ? '100%' : 'auto',
-            transform: `translate(${panX}px, ${panY}px)`,
+            minHeight: !isClipperMode && viewZoom === 1.0 ? '100%' : 'auto',
+            maxWidth: isClipperMode ? '100%' : 'none',
+            maxHeight: isClipperMode ? '100%' : 'none',
+            transform: isClipperMode ? 'none' : `translate(${panX}px, ${panY}px)`,
             transition: isCanvasPanning ? 'none' : 'transform 0.15s ease-out',
-            border: '1px solid rgba(255,255,255,0.12)',
-            boxShadow: '0 0 0 1px rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.6)',
-            backgroundColor: 'black'
+            border: isClipperMode ? 'none' : '1px solid rgba(255,255,255,0.12)',
+            boxShadow: isClipperMode ? 'none' : '0 0 0 1px rgba(255,255,255,0.06), 0 8px 32px rgba(0,0,0,0.6)',
+            backgroundColor: 'black',
           }}
         >
+          {appMode === 'editor' && autoBackgroundEnabled && (
+            <video
+              ref={backgroundVideoRef}
+              src={videoSrc}
+              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+              muted
+              playsInline
+              crossOrigin="anonymous"
+              onLoadedMetadata={(e) => {
+                e.currentTarget.currentTime = videoRef.current?.currentTime ?? Math.max(0, startSecs);
+              }}
+              style={{
+                filter: 'blur(28px) brightness(0.5)',
+                transform: 'scale(1.08)',
+                zIndex: 0,
+              }}
+            />
+          )}
+
           {/* PROPORTIONAL VIDEO WRAPPER */}
           <div
             style={{
               position: 'relative',
+              width: isClipperMode ? '100%' : 'auto',
+              height: isClipperMode ? '100%' : 'auto',
               maxWidth: '100%',
               maxHeight: '100%',
               aspectRatio: videoAspectRatio || '16/9',
@@ -519,7 +569,7 @@ const CustomPreview = ({
           )}
 
           {/* Captions - Proportional to Video Frame */}
-          {transcript && transcript.length > 0 && captionSettings?.presetId !== 'none' && (
+          {!isClipperMode && transcript && transcript.length > 0 && captionSettings?.presetId !== 'none' && (
             <div className="absolute inset-0 z-40 pointer-events-none flex items-center justify-center">
               <div
                 ref={aspectRatioBoxRef}
@@ -610,9 +660,9 @@ const CustomPreview = ({
         </div>
 
         {/* Helper Tooltip Overlay */}
-        <div className="absolute bottom-6 left-6 z-[100] text-[10px] text-white/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+        {!isClipperMode && <div className="absolute bottom-6 left-6 z-[100] text-[10px] text-white/20 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
           Double click to reset view
-        </div>
+        </div>}
       </div>
     </div>
   );

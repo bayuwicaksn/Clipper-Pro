@@ -11,6 +11,7 @@ All route handlers are organized into routers under the api/ directory:
 """
 
 import os
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -31,6 +32,19 @@ from db.database import create_db_and_tables
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    loop = asyncio.get_running_loop()
+    default_exception_handler = loop.get_exception_handler()
+
+    def ignore_client_disconnects(loop, context):
+        exc = context.get("exception")
+        if isinstance(exc, ConnectionResetError) and getattr(exc, "winerror", None) == 10054:
+            return
+        if default_exception_handler:
+            default_exception_handler(loop, context)
+        else:
+            loop.default_exception_handler(context)
+
+    loop.set_exception_handler(ignore_client_disconnects)
     create_db_and_tables()
     yield
 

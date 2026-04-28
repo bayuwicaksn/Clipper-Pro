@@ -240,6 +240,7 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
 
     with open(json_path, 'r', encoding='utf-8') as f:
         metadata = json.load(f)
+    metadata['auto_background_enabled'] = data.auto_background_enabled
         
     config = {}
     for loc in ['session.json', os.path.join('output', 'session.json')]:

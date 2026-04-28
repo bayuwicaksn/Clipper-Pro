@@ -151,7 +151,13 @@ async def load_editor_state(job_id: str, clip_index: int = Query(0)):
 
 
 @router.get('/transcript/{job_id}/{clip_index}')
-async def get_transcript(job_id: str, clip_index: str, force: bool = Query(False)):
+async def get_transcript(
+    job_id: str,
+    clip_index: str,
+    force: bool = Query(False),
+    start: Optional[float] = Query(None),
+    end: Optional[float] = Query(None),
+):
     """Return word-level transcript filtered to the clip's current bounds."""
     job_dir = resolve_job_dir(job_id)
     if not job_dir:
@@ -170,7 +176,10 @@ async def get_transcript(job_id: str, clip_index: str, force: bool = Query(False
         if not all_words:
             return []
         
-        start_sec, end_sec = _get_clip_bounds(job_dir, clip_index)
+        if start is not None and end is not None:
+            start_sec, end_sec = float(start), float(end)
+        else:
+            start_sec, end_sec = _get_clip_bounds(job_dir, clip_index)
         
         if end_sec <= start_sec:
             logger.warning(f"[TRANSCRIPT] Invalid bounds start={start_sec}, end={end_sec}. Returning all words.")

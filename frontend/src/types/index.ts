@@ -36,6 +36,7 @@ export interface Clip {
   duration_seconds?: number;
   exported?: boolean;
   exports?: ExportedFile[];
+  auto_background_enabled?: boolean;
 }
 
 export interface ExportedFile {
@@ -50,6 +51,7 @@ export interface Segment {
   crop_x?: number;
   crop_y?: number;
   crop_z?: number;
+  auto_background_enabled?: boolean;
 }
 
 export interface ProgressState {

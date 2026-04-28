@@ -74,8 +74,19 @@ export const saveEditorState = (jobId: string, clipIndex: number, payload: any) 
 export const fetchCaptionPresets = () => 
   apiFetch<{ presets: any[] }>('/api/captions/presets');
 
-export const fetchTranscript = (jobId: string, clipIdx: number, force: boolean = false) => 
-  apiFetch<any[]>(`/api/transcript/${jobId}/${clipIdx}${force ? '?force=true' : ''}`);
+export const fetchTranscript = (
+  jobId: string,
+  clipIdx: number,
+  force: boolean = false,
+  bounds?: { start?: number; end?: number }
+) => {
+  const params = new URLSearchParams();
+  if (force) params.set('force', 'true');
+  if (bounds?.start !== undefined) params.set('start', String(bounds.start));
+  if (bounds?.end !== undefined) params.set('end', String(bounds.end));
+  const query = params.toString();
+  return apiFetch<any[]>(`/api/transcript/${jobId}/${clipIdx}${query ? `?${query}` : ''}`);
+};
 
 export const generateCaptionComposition = async (
   jobId: string, 

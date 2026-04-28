@@ -53,6 +53,16 @@ export default function Timeline({
 
   const clip = clips[activeClipIndex];
   const hasClip = Boolean(clip);
+  const clipperSegment = React.useMemo(() => {
+    if (appMode !== 'clipper' || !clip) return null;
+    return {
+      id: 'clipper-main',
+      start: Math.max(0, clip.start_time ? timestampToSeconds(clip.start_time) : 0),
+      end: Math.max(1, clip.end_time ? timestampToSeconds(clip.end_time) : 60),
+      crop_x: clip.custom_crop_x || 0.5,
+    };
+  }, [appMode, clip]);
+  const timelineSegments = appMode === 'clipper' && clipperSegment ? [clipperSegment] : segments;
   const startTime = appMode === 'clipper' ? 0 : Math.max(0, clip?.start_time ? timestampToSeconds(clip.start_time) : 0);
   const totalEnd = appMode === 'clipper' 
     ? (project?.video_duration ? timestampToSeconds(project.video_duration) : (clip?.duration ? timestampToSeconds(clip.duration) : 60))
@@ -71,12 +81,23 @@ export default function Timeline({
   const { frames } = useVideoExtraction(project?.id, startTime, totalDuration, frameCount);
   const playerFrame = useCurrentPlayerFrame(playerRef, isPlayerReady);
 
-  const activeSegStart = appMode === 'clipper' ? (segments[0]?.start || 0) : (segments[activeSegmentIndex]?.start ?? startTime);
-  const currentTime = isPlaying ? (playerFrame / 30) + activeSegStart : storeCurrentTime;
+  const activeTimelineSegment = appMode === 'clipper'
+    ? timelineSegments[0]
+    : timelineSegments[activeSegmentIndex];
+  const activeSegStart = activeTimelineSegment?.start ?? startTime;
+  const rawCurrentTime = isPlaying
+    ? (playerFrame / 30) + activeSegStart
+    : storeCurrentTime;
+  const currentTime = appMode === 'clipper' && activeTimelineSegment
+    ? Math.max(activeTimelineSegment.start, Math.min(activeTimelineSegment.end, rawCurrentTime))
+    : rawCurrentTime;
 
   const onSeek = (time) => {
-    setSeekRequested(Math.max(0, time));
-    setCurrentTime(Math.max(0, time));
+    const safeTime = appMode === 'clipper' && activeTimelineSegment
+      ? Math.max(activeTimelineSegment.start, Math.min(activeTimelineSegment.end, time))
+      : Math.max(0, time);
+    setSeekRequested(safeTime);
+    setCurrentTime(safeTime);
   };
 
   const onTogglePlay = () => useEditorStore.getState().setIsPlaying(!isPlaying);
@@ -178,12 +199,12 @@ export default function Timeline({
 
   const startHandleDrag = (event, index, type) => {
     event.stopPropagation();
-    if (!segments[index]) return;
+    if (!timelineSegments[index]) return;
     dragRef.current = {
       index,
       type,
       startX: event.clientX,
-      base: { start: segments[index].start, end: segments[index].end },
+      base: { start: timelineSegments[index].start, end: timelineSegments[index].end },
     };
     document.addEventListener("mousemove", handleDragMove);
     document.addEventListener("mouseup", handleDragUp);
@@ -299,12 +320,12 @@ export default function Timeline({
             </div>
 
             <div className="nle-timeline-track-body">
-              {segments.map((seg, idx) => {
+              {timelineSegments.map((seg, idx) => {
                 const safeStart = Number(seg.start) || 0;
                 const safeEnd = Number(seg.end) || 0;
                 const widthPct = ((safeEnd - safeStart) / totalDuration) * 100;
                 const leftPct = ((safeStart - startTime) / totalDuration) * 100;
-                const active = idx === activeSegmentIndex;
+                const active = appMode === 'clipper' ? idx === 0 : idx === activeSegmentIndex;
 
                 // Calculate exactly how many 42px thumbnails fit in the segment's physical width
                 const segmentWidthPx = (widthPct / 100) * trackWidth;

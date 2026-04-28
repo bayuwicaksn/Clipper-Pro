@@ -3,6 +3,19 @@ import * as api from '../api/client';
 import { Project, Clip, Segment, Word, AppMode } from '../types';
 import { timestampToSeconds, formatTimeHHMMSS } from '../utils/time';
 
+const ACTIVE_TAB_STORAGE_KEY = 'nle_active_tab';
+
+function getInitialAppMode(): AppMode {
+  if (typeof window === 'undefined') return 'clipper';
+  const saved = window.localStorage.getItem(ACTIVE_TAB_STORAGE_KEY);
+  return saved === 'editor' || saved === 'clipper' ? saved : 'clipper';
+}
+
+function persistAppMode(appMode: AppMode) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, appMode);
+}
+
 interface EditorState {
   // Data
   project: Project | null;
@@ -84,7 +97,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   project: null,
   clips: [],
   activeClipIndex: 0,
-  appMode: 'clipper',
+  appMode: getInitialAppMode(),
   segments: [],
   activeSegmentIndex: 0,
   activeTab: 'captions',
@@ -139,7 +152,10 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     clips: typeof clips === 'function' ? clips(state.clips) : clips 
   })),
   setActiveClipIndex: (activeClipIndex) => set({ activeClipIndex }),
-  setAppMode: (appMode) => set({ appMode }),
+  setAppMode: (appMode) => {
+    persistAppMode(appMode);
+    set({ appMode });
+  },
   setSegments: (segments) => set((state) => ({ 
     segments: typeof segments === 'function' ? segments(state.segments) : segments 
   })),
@@ -171,7 +187,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   loadProjectData: async (projectId) => {
     try {
       const data = await api.fetchClips(projectId);
-      set({ clips: data.clips || [] });
+      set({ 
+        clips: (data.clips || []).map((clip: any) => ({
+          ...clip,
+          auto_background_enabled: clip.auto_background_enabled !== false
+        }))
+      });
     } catch (err) {
       console.error("Could not fetch clips", err);
     }
@@ -216,12 +237,17 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   fetchTranscript: async (force = false) => {
-    const { project, activeClipIndex } = get();
+    const { project, clips, activeClipIndex } = get();
     if (!project?.id) return;
 
     set({ isLoadingTranscript: true });
     try {
-      const data = await api.fetchTranscript(project.id, activeClipIndex, force);
+      const activeClip = clips[activeClipIndex];
+      const bounds = activeClip ? {
+        start: timestampToSeconds(activeClip.start_time),
+        end: timestampToSeconds(activeClip.end_time),
+      } : undefined;
+      const data = await api.fetchTranscript(project.id, activeClipIndex, force, bounds);
       if (Array.isArray(data)) {
         set({ transcript: data });
       }
@@ -245,11 +271,12 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         caption_settings: captionSettings,
       };
 
-      if (appMode === 'clipper' && activeClip) {
+      if (activeClip) {
         payload.clip = {
           start_time: activeClip.start_time,
           end_time: activeClip.end_time,
-          custom_crop_x: activeClip.custom_crop_x
+          custom_crop_x: activeClip.custom_crop_x,
+          auto_background_enabled: activeClip.auto_background_enabled !== false
         };
       }
 
@@ -308,6 +335,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       
       clip.start_time = formatTimeHHMMSS(safeStart);
       clip.end_time = formatTimeHHMMSS(safeEnd);
+      clip.auto_background_enabled = clip.auto_background_enabled !== false;
       updatedClips[activeClipIndex] = clip;
       
       set({ 
@@ -377,7 +405,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
             id: Math.random().toString(36).substr(2, 9), 
             start: lastT, 
             end: t, 
-            crop_x: activeClip.custom_crop_x || 0.5 
+            crop_x: activeClip.custom_crop_x || 0.5,
+            auto_background_enabled: activeClip.auto_background_enabled !== false
           });
           lastT = t;
         });
@@ -446,7 +475,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
         segments: segments,
         caption_settings: captionSettings,
         transcript: transcript,
-        aspect_ratio: aspectRatio
+        aspect_ratio: aspectRatio,
+        auto_background_enabled: activeClip.auto_background_enabled !== false
       });
 
       if (data.export_id) {

@@ -12,6 +12,18 @@ import * as api from "../api/client";
 
 import { useEditorStore } from '@/store/editorStore';
 
+const PLAYER_SIZE_STORAGE_KEY = 'nle_editor_player_panel_size';
+const MIN_PLAYER_SIZE = 0.25;
+const MAX_PLAYER_SIZE = 4.0;
+const DEFAULT_PLAYER_SIZE = 1.0;
+
+function getStoredPlayerSize() {
+  if (typeof window === 'undefined') return DEFAULT_PLAYER_SIZE;
+  const numeric = Number(window.localStorage.getItem(PLAYER_SIZE_STORAGE_KEY));
+  if (!Number.isFinite(numeric)) return DEFAULT_PLAYER_SIZE;
+  return Math.max(MIN_PLAYER_SIZE, Math.min(MAX_PLAYER_SIZE, numeric));
+}
+
 export default function EditorLayout({ project: initialProject, initialClipIndex = 0, onClose, notify }) {
   const playerRef = useRef(null);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
@@ -53,10 +65,12 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
   } = useEditorStore();
 
   const activeClip = clips[activeClipIndex];
+  const activeClipStart = activeClip?.start_time ? timestampToSeconds(activeClip.start_time) : 0;
+  const activeClipEnd = activeClip?.end_time ? timestampToSeconds(activeClip.end_time) : 60;
 
   const activeSegment = appMode === 'clipper' ? {
-    start: activeClip?.start_time ? timestampToSeconds(activeClip.start_time) : 0,
-    end: activeClip?.end_time ? timestampToSeconds(activeClip.end_time) : 60,
+    start: activeClipStart,
+    end: activeClipEnd,
     crop_x: activeClip?.custom_crop_x || 0.5,
     crop_y: 0.5,
     crop_z: 1.0
@@ -85,14 +99,58 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
     }
   }, [clips, activeClipIndex]);
 
+  // Keep Editor segment bounds in sync when Clipper changes the clip without
+  // wiping player transform settings already adjusted in Editor.
+  React.useEffect(() => {
+    if (appMode !== 'clipper' || !activeClip || activeClipEnd <= activeClipStart) return;
+
+    setSegments(prev => {
+      const current = prev[activeSegmentIndex] || prev[0] || {};
+      return [{
+        ...current,
+        id: current.id || 'clipper-main',
+        start: activeClipStart,
+        end: activeClipEnd,
+        crop_x: current.crop_x ?? activeClip.custom_crop_x ?? 0.5,
+        crop_y: current.crop_y ?? 0.5,
+        crop_z: current.crop_z ?? getStoredPlayerSize(),
+        auto_background_enabled: activeClip.auto_background_enabled !== false
+      }];
+    });
+    setActiveSegmentIndex(0);
+  }, [
+    appMode,
+    activeClipIndex,
+    activeClipStart,
+    activeClipEnd,
+    activeClip?.custom_crop_x,
+    activeClip?.auto_background_enabled,
+    project?.id
+  ]);
+
+  // Refetch transcript against current in-memory clip bounds, even before save.
+  React.useEffect(() => {
+    if (!activeClip || activeClipEnd <= activeClipStart) return;
+
+    const timer = setTimeout(() => {
+      fetchTranscript();
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [
+    activeClipStart,
+    activeClipEnd,
+    activeClipIndex,
+    project?.id
+  ]);
+
   // Clipper Mode: Seek to start
   React.useEffect(() => {
     if (appMode === 'clipper' && activeClip) {
-      const start = timestampToSeconds(activeClip.start_time);
-      setSeekRequested(start);
-      setCurrentTime(start);
+      setSeekRequested(activeClipStart);
+      setCurrentTime(activeClipStart);
     }
-  }, [activeClipIndex, appMode]);
+  }, [activeClipIndex, appMode, activeClipStart]);
 
   // Fetch Presets
   React.useEffect(() => {
@@ -161,7 +219,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
       saveEditorState();
     }, 2000);
     return () => clearTimeout(timer);
-  }, [segments, captionSettings, activeClipIndex, activeSegmentIndex, isLoadingSavedState, appMode]);
+  }, [segments, captionSettings, clips, activeClipIndex, activeSegmentIndex, isLoadingSavedState, appMode]);
 
 
 
@@ -210,6 +268,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
         </div>
 
         <div className="flex items-center gap-2">
+          {appMode === 'editor' && (
           <div className="flex items-center bg-white/5 rounded-lg p-1 border border-white/10">
             {['9:16', '16:9'].map(ratio => (
               <button
@@ -221,6 +280,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
               </button>
             ))}
           </div>
+          )}
           <Button variant="outline" size="sm" onClick={handleManualSave} disabled={saveStatus === 'saving'} className="h-8 font-bold">
             <Save className="w-3.5 h-3.5 mr-1.5" /> Save
           </Button>
