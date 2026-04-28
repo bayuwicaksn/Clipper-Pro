@@ -470,7 +470,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const data = await api.autoTrackFace(project.id, activeClipIndex, activeSegment.start);
       if (data.crop_x !== undefined) {
         const newSegs = [...segments];
-        newSegs[activeSegmentIndex].crop_x = data.crop_x;
+        newSegs[activeSegmentIndex] = { ...newSegs[activeSegmentIndex], crop_x: data.crop_x };
         setSegments(newSegs);
         notify("Wajah berhasil dideteksi dan di-center!", "success");
       } else {

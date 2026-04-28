@@ -173,7 +173,15 @@ async def auto_track_frame(job_id: str, timestamp: float = Query(0), clip_index:
         if not os.path.exists(clip_path):
             clip_path = os.path.join(job_dir, 'output', f'clip_{clip_index:03d}_raw.mp4')
             if not os.path.exists(clip_path):
-                raise HTTPException(status_code=404, detail='Raw clip not found')
+                # Fallback to source video (same approach as detect_scenes)
+                clip_path = os.path.join(job_dir, 'source.mp4')
+                if not os.path.exists(clip_path):
+                    for f in os.listdir(job_dir):
+                        if f.endswith('.mp4') and not os.path.isdir(os.path.join(job_dir, f)):
+                            clip_path = os.path.join(job_dir, f)
+                            break
+                if not os.path.exists(clip_path):
+                    raise HTTPException(status_code=404, detail='Raw clip or source video not found')
             
     try:
         from core.reframer import get_face_center_x
@@ -182,15 +190,16 @@ async def auto_track_frame(job_id: str, timestamp: float = Query(0), clip_index:
         if os.path.exists(meta_path):
             with open(meta_path, 'r', encoding='utf-8') as f:
                 meta = json.load(f)
-                start_str = meta.get('start_time', '00:00:00')
-                parts = [float(x) for x in start_str.split(':')]
-                clip_origin = parts[0]*3600 + parts[1]*60 + parts[2]
+                clip_origin = timestamp_to_seconds(meta.get('start_time', '00:00:00'))
                 
         local_timestamp = max(0, timestamp - clip_origin)
+        logger.info(f"[AutoTrack] clip_path={clip_path}, exists={os.path.exists(clip_path)}, timestamp={timestamp}, clip_origin={clip_origin}, local_ts={local_timestamp}")
         
         crop_x = get_face_center_x(clip_path, local_timestamp)
         return {'crop_x': crop_x}
     except Exception as e:
+        import traceback
+        logger.error(f"[AutoTrack] Error: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
