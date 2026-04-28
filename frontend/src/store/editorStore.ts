@@ -382,15 +382,23 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   },
 
   autoSplitSegments: async (notify) => {
-    const { project, clips, activeClipIndex, setIsProcessing, setStatusMessage, setSegments, setActiveSegmentIndex } = get();
+    const { project, clips, activeClipIndex, segments, setIsProcessing, setStatusMessage, setSegments, setActiveSegmentIndex, setCurrentTime, setSeekRequested } = get();
     const activeClip = clips[activeClipIndex];
     if (!project?.id || !activeClip) return;
+
+    // UI handles confirmation, proceeding directly.
+
+    const clipStart = timestampToSeconds(activeClip.start_time);
+    const clipEnd = timestampToSeconds(activeClip.end_time);
+
+    setSegments([]);
+    setActiveSegmentIndex(0);
+    setCurrentTime(clipStart);
+    setSeekRequested(clipStart);
 
     setIsProcessing(true);
     setStatusMessage('AI sedang membedah video...');
     
-    const clipStart = timestampToSeconds(activeClip.start_time);
-    const clipEnd = timestampToSeconds(activeClip.end_time);
     const eventSource = new EventSource(`${api.API_BASE}/api/detect_scenes/${project.id}?start=${clipStart}&end=${clipEnd}`);
 
     eventSource.onmessage = (event) => {

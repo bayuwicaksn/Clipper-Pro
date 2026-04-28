@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import './EditorNLE.css';
 import ClipperView from './ClipperView';
 import EditorView from './EditorView';
@@ -28,6 +29,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
   const playerRef = useRef(null);
   const [isPlayerReady, setIsPlayerReady] = useState(false);
   const [presets, setPresets] = useState([]);
+  const [showAutoSplitConfirm, setShowAutoSplitConfirm] = useState(false);
 
   // Store State
   const {
@@ -75,6 +77,19 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
     crop_y: 0.5,
     crop_z: 1.0
   } : segments[activeSegmentIndex];
+
+  const handleAutoSplitClick = () => {
+    if (segments.length > 1) {
+      setShowAutoSplitConfirm(true);
+    } else {
+      autoSplitSegments(notify);
+    }
+  };
+
+  const confirmAutoSplit = () => {
+    setShowAutoSplitConfirm(false);
+    autoSplitSegments(notify);
+  };
 
   // Initialize Project and Data
   React.useEffect(() => {
@@ -304,7 +319,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
           isPlayerReady={isPlayerReady}
           presets={presets}
           handleSplit={splitSegment}
-          handleAutoSplit={() => autoSplitSegments(notify)}
+          handleAutoSplit={handleAutoSplitClick}
           handleAutoTrack={() => autoTrackFace(notify)}
           handleSegmentBoundsChange={updateSegmentBounds}
           handleDeleteSegment={deleteSegment}
@@ -325,6 +340,21 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
           <p className="text-muted-foreground text-sm mt-8 opacity-60">This may take a minute. Please don't close the browser.</p>
         </div>
       )}
+
+      <Dialog open={showAutoSplitConfirm} onOpenChange={setShowAutoSplitConfirm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirm Auto Split</DialogTitle>
+            <DialogDescription>
+              This will replace all {segments.length} existing segments. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowAutoSplitConfirm(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmAutoSplit}>Replace Segments</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
