@@ -50,6 +50,7 @@ const CustomPreview = ({
   const captionIframeRef = useRef(null);
   const scrollAreaRef = useRef(null);
   const listenersRef = useRef({ frameupdate: new Set() });
+  const segmentEndLockRef = useRef(false);
   const [isVideoReady, setIsVideoReady] = useState(false);
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [viewZoom, setViewZoom] = useState(1.0); // 1.0 = Fit
@@ -207,7 +208,7 @@ const CustomPreview = ({
 
   // Handle Seek Requested
   useEffect(() => {
-    if (seekRequested !== undefined && videoRef.current) {
+    if (seekRequested != null && videoRef.current) {
       videoRef.current.currentTime = seekRequested;
       if (backgroundVideoRef.current) backgroundVideoRef.current.currentTime = seekRequested;
       listenersRef.current['frameupdate']?.forEach(cb => cb());
@@ -216,6 +217,7 @@ const CustomPreview = ({
 
   // Handle segment start changes
   useEffect(() => {
+    segmentEndLockRef.current = false;
     if (videoRef.current && !playing && isVideoReady) {
       if (Math.abs(videoRef.current.currentTime - startSecs) > 0.1) {
         videoRef.current.currentTime = startSecs;
@@ -242,9 +244,8 @@ const CustomPreview = ({
           captionIframeRef.current.contentWindow.postMessage({ type: 'seek', time }, '*');
         }
 
-        if (time >= endSecs && playing) {
-          videoRef.current.pause();
-          backgroundVideoRef.current?.pause();
+        if (time >= endSecs && playing && !segmentEndLockRef.current) {
+          segmentEndLockRef.current = true;
           onSegmentEnd();
         }
       }

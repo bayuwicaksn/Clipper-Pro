@@ -397,10 +397,19 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       const data = JSON.parse(event.data);
       if (data.progress !== undefined) setStatusMessage(`AI sedang membedah video... (${data.progress}%)`);
       if (data.cuts) {
-        const relevantCuts = data.cuts.filter((t: number) => t > clipStart + 1 && t < clipEnd - 1);
+        const clipDuration = Math.max(0, clipEnd - clipStart);
+        const normalizedCuts = data.cuts
+          .map((raw: number) => {
+            const t = Number(raw);
+            if (!Number.isFinite(t)) return null;
+            return t < clipStart - 0.001 && t <= clipDuration + 1 ? clipStart + t : t;
+          })
+          .filter((t: number | null): t is number => t !== null && t > clipStart + 1 && t < clipEnd - 1)
+          .sort((a: number, b: number) => a - b)
+          .filter((t: number, idx: number, arr: number[]) => idx === 0 || Math.abs(t - arr[idx - 1]) > 0.25);
         let newSegs: Segment[] = [];
         let lastT = clipStart;
-        [...relevantCuts, clipEnd].forEach((t) => {
+        [...normalizedCuts, clipEnd].forEach((t) => {
           newSegs.push({ 
             id: Math.random().toString(36).substr(2, 9), 
             start: lastT, 

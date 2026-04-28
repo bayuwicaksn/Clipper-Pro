@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Sparkles, ChevronDown, Type, Scissors, ChevronLeft } from 'lucide-react';
+import { Sparkles, ChevronDown, Type, Scissors, Cloud, LayoutTemplate, Film, Music, Zap } from 'lucide-react';
 
 import { useEditorStore } from '@/store/editorStore';
 
@@ -39,7 +39,65 @@ export default function Sidebar({
     setCaptionSettings({ ...captionSettings, [key]: value });
   };
 
+  useEffect(() => {
+    if (activeTab === 'captions') setActiveSubTab('Presets');
+  }, [activeTab]);
+
   if (!clip) return <div className="nle-panel-content p-8 text-center text-zinc-500">Select a clip</div>;
+
+  if (activeTab !== 'captions') {
+    const panelMeta = {
+      'ai-enhance': {
+        icon: Sparkles,
+        title: 'AI Enhance',
+        description: 'Analyze this clip and prepare smart edit assists.',
+        actions: [
+          { label: 'Auto Split Scenes', icon: Scissors, onClick: onAutoSplit },
+          { label: 'Auto Track Face', icon: Sparkles, onClick: onAutoTrack },
+          { label: 'Regenerate Transcript', icon: Type, onClick: onRegenerateTranscript },
+        ],
+      },
+      media: { icon: Cloud, title: 'Media', description: 'Media controls for this clip will appear here.' },
+      brand: { icon: LayoutTemplate, title: 'Brand Template', description: 'Brand styling and reusable templates will appear here.' },
+      'b-roll': { icon: Film, title: 'B-Roll', description: 'B-roll suggestions and inserts will appear here.' },
+      transitions: { icon: Sparkles, title: 'Transitions', description: 'Transition controls will appear here.' },
+      text: { icon: Type, title: 'Text', description: 'Text overlays and title controls will appear here.' },
+      music: { icon: Music, title: 'Music', description: 'Music and audio controls will appear here.' },
+      'ai-hook': { icon: Zap, title: 'AI Hook', description: 'Hook generation controls will appear here.' },
+    };
+
+    const meta = panelMeta[activeTab] || panelMeta.media;
+    const Icon = meta.icon;
+
+    return (
+      <div className="flex flex-col h-full bg-[#0d0d0e]">
+        <div className="border-b border-[#27272a] px-5 py-4">
+          <div className="flex items-center gap-2 text-sm font-bold text-white">
+            <Icon className="w-4 h-4" />
+            {meta.title}
+          </div>
+        </div>
+        <div className="flex-1 p-5 space-y-4 overflow-y-auto custom-scrollbar">
+          <p className="text-sm leading-6 text-zinc-400">{meta.description}</p>
+          {meta.actions?.map((action) => {
+            const ActionIcon = action.icon;
+            return (
+              <Button
+                key={action.label}
+                variant="outline"
+                size="sm"
+                onClick={action.onClick}
+                className="w-full justify-start h-10 text-xs font-bold border-white/5 bg-white/5 hover:bg-white/10"
+              >
+                <ActionIcon className="w-3.5 h-3.5 mr-2" />
+                {action.label}
+              </Button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full bg-[#0d0d0e]">

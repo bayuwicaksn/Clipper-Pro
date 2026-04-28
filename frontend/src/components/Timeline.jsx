@@ -68,6 +68,36 @@ export default function Timeline({
     ? (project?.video_duration ? timestampToSeconds(project.video_duration) : (clip?.duration ? timestampToSeconds(clip.duration) : 60))
     : Math.max(1, clip?.end_time ? timestampToSeconds(clip.end_time) : (clip?.duration ? timestampToSeconds(clip.duration) : 60));
   const totalDuration = Math.max(0.1, totalEnd - startTime);
+  const normalizedTimelineSegments = React.useMemo(() => {
+    const numericSegments = timelineSegments
+      .map((seg) => ({
+        ...seg,
+        start: Number(seg.start),
+        end: Number(seg.end),
+      }))
+      .filter((seg) => Number.isFinite(seg.start) && Number.isFinite(seg.end));
+    const maxEnd = Math.max(0, ...numericSegments.map((seg) => seg.end));
+    const minStart = Math.min(Number.POSITIVE_INFINITY, ...numericSegments.map((seg) => seg.start));
+    const segmentsLookLocal = appMode === 'editor'
+      && startTime > 0
+      && numericSegments.length > 0
+      && minStart < startTime - 0.001
+      && maxEnd <= totalDuration + 1;
+
+    return timelineSegments
+      .map((seg) => {
+        const rawStart = Number(seg.start);
+        const rawEnd = Number(seg.end);
+        const normalizedStart = segmentsLookLocal ? startTime + rawStart : rawStart;
+        const normalizedEnd = segmentsLookLocal ? startTime + rawEnd : rawEnd;
+        return {
+          ...seg,
+          start: Math.max(startTime, Math.min(totalEnd, normalizedStart)),
+          end: Math.max(startTime, Math.min(totalEnd, normalizedEnd)),
+        };
+      })
+      .filter((seg) => seg.end > seg.start);
+  }, [timelineSegments, appMode, startTime, totalDuration, totalEnd]);
   const snapStepSec = 0.01;
 
   const [zoom, setZoom] = React.useState(1);
@@ -81,9 +111,21 @@ export default function Timeline({
   const { frames } = useVideoExtraction(project?.id, startTime, totalDuration, frameCount);
   const playerFrame = useCurrentPlayerFrame(playerRef, isPlayerReady);
 
+  React.useEffect(() => {
+    if (import.meta.env.DEV && appMode === 'editor' && normalizedTimelineSegments.length > 0) {
+      console.table(normalizedTimelineSegments.map((seg, idx) => ({
+        idx,
+        start: Number(seg.start).toFixed(3),
+        end: Number(seg.end).toFixed(3),
+        leftPct: (((Number(seg.start) - startTime) / totalDuration) * 100).toFixed(2),
+        widthPct: (((Number(seg.end) - Number(seg.start)) / totalDuration) * 100).toFixed(2),
+      })));
+    }
+  }, [appMode, normalizedTimelineSegments, startTime, totalDuration]);
+
   const activeTimelineSegment = appMode === 'clipper'
-    ? timelineSegments[0]
-    : timelineSegments[activeSegmentIndex];
+    ? normalizedTimelineSegments[0]
+    : normalizedTimelineSegments[activeSegmentIndex];
   const activeSegStart = activeTimelineSegment?.start ?? startTime;
   const rawCurrentTime = isPlaying
     ? (playerFrame / 30) + activeSegStart
@@ -199,12 +241,12 @@ export default function Timeline({
 
   const startHandleDrag = (event, index, type) => {
     event.stopPropagation();
-    if (!timelineSegments[index]) return;
+    if (!normalizedTimelineSegments[index]) return;
     dragRef.current = {
       index,
       type,
       startX: event.clientX,
-      base: { start: timelineSegments[index].start, end: timelineSegments[index].end },
+      base: { start: normalizedTimelineSegments[index].start, end: normalizedTimelineSegments[index].end },
     };
     document.addEventListener("mousemove", handleDragMove);
     document.addEventListener("mouseup", handleDragUp);
@@ -320,7 +362,7 @@ export default function Timeline({
             </div>
 
             <div className="nle-timeline-track-body">
-              {timelineSegments.map((seg, idx) => {
+              {normalizedTimelineSegments.map((seg, idx) => {
                 const safeStart = Number(seg.start) || 0;
                 const safeEnd = Number(seg.end) || 0;
                 const widthPct = ((safeEnd - safeStart) / totalDuration) * 100;
