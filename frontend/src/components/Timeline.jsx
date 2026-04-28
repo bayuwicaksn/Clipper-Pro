@@ -19,10 +19,10 @@ import {
 } from "lucide-react";
 
 import { useEditorStore } from '@/store/editorStore';
-import { 
-  formatClock, 
-  formatDuration, 
-  formatRulerLabel, 
+import {
+  formatClock,
+  formatDuration,
+  formatRulerLabel,
   snapTime,
   chooseTickStep,
   timestampToSeconds
@@ -63,41 +63,34 @@ export default function Timeline({
     };
   }, [appMode, clip]);
   const timelineSegments = appMode === 'clipper' && clipperSegment ? [clipperSegment] : segments;
-  const startTime = appMode === 'clipper' ? 0 : Math.max(0, clip?.start_time ? timestampToSeconds(clip.start_time) : 0);
-  const totalEnd = appMode === 'clipper' 
-    ? (project?.video_duration ? timestampToSeconds(project.video_duration) : (clip?.duration ? timestampToSeconds(clip.duration) : 60))
-    : Math.max(1, clip?.end_time ? timestampToSeconds(clip.end_time) : (clip?.duration ? timestampToSeconds(clip.duration) : 60));
+
+  // Clip absolute bounds in the source video
+  const clipStartSecs = Math.max(0, clip?.start_time ? timestampToSeconds(clip.start_time) : 0);
+  const clipEndSecs = Math.max(1, clip?.end_time ? timestampToSeconds(clip.end_time) : (clip?.duration ? timestampToSeconds(clip.duration) : 60));
+
+  // In editor mode: startTime = clipStart (absolute), totalEnd = clipEnd (absolute)
+  // Segments are absolute (e.g. 45–111s). leftPct = (seg.start - startTime) / totalDuration
+  // maps segment at 45s to 0% on the timeline. Ruler/timecode show relative (0:00–1:06).
+  // In clipper mode: full video range.
+  const startTime = appMode === 'clipper' ? 0 : clipStartSecs;
+  const totalEnd = appMode === 'clipper'
+    ? (project?.video_duration ? timestampToSeconds(project.video_duration) : clipEndSecs)
+    : clipEndSecs;
   const totalDuration = Math.max(0.1, totalEnd - startTime);
   const normalizedTimelineSegments = React.useMemo(() => {
-    const numericSegments = timelineSegments
-      .map((seg) => ({
-        ...seg,
-        start: Number(seg.start),
-        end: Number(seg.end),
-      }))
-      .filter((seg) => Number.isFinite(seg.start) && Number.isFinite(seg.end));
-    const maxEnd = Math.max(0, ...numericSegments.map((seg) => seg.end));
-    const minStart = Math.min(Number.POSITIVE_INFINITY, ...numericSegments.map((seg) => seg.start));
-    const segmentsLookLocal = appMode === 'editor'
-      && startTime > 0
-      && numericSegments.length > 0
-      && minStart < startTime - 0.001
-      && maxEnd <= totalDuration + 1;
-
     return timelineSegments
       .map((seg) => {
         const rawStart = Number(seg.start);
         const rawEnd = Number(seg.end);
-        const normalizedStart = segmentsLookLocal ? startTime + rawStart : rawStart;
-        const normalizedEnd = segmentsLookLocal ? startTime + rawEnd : rawEnd;
+        if (!Number.isFinite(rawStart) || !Number.isFinite(rawEnd)) return null;
         return {
           ...seg,
-          start: Math.max(startTime, Math.min(totalEnd, normalizedStart)),
-          end: Math.max(startTime, Math.min(totalEnd, normalizedEnd)),
+          start: Math.max(startTime, Math.min(totalEnd, rawStart)),
+          end: Math.max(startTime, Math.min(totalEnd, rawEnd)),
         };
       })
-      .filter((seg) => seg.end > seg.start);
-  }, [timelineSegments, appMode, startTime, totalDuration, totalEnd]);
+      .filter((seg) => seg !== null && seg.end > seg.start);
+  }, [timelineSegments, startTime, totalEnd]);
   const snapStepSec = 0.01;
 
   const [zoom, setZoom] = React.useState(1);
@@ -106,22 +99,27 @@ export default function Timeline({
   const isScrubbing = React.useRef(false);
   const dragRef = React.useRef(null);
   const hasInitiallyScrolled = React.useRef(false);
+  const prevTotalDuration = React.useRef(totalDuration);
+
+  // Reset zoom when totalDuration changes significantly (e.g. switching from full video to clip)
+  React.useEffect(() => {
+    const ratio = totalDuration / prevTotalDuration.current;
+    if (ratio < 0.3 || ratio > 3) {
+      setZoom(1);
+      hasInitiallyScrolled.current = false;
+    }
+    prevTotalDuration.current = totalDuration;
+  }, [totalDuration]);
 
   const { zoomFactor, trackWidth, frameCount, majorTicks, minorTicks } = useTimelineMath(totalDuration, zoom, appMode);
   const { frames } = useVideoExtraction(project?.id, startTime, totalDuration, frameCount);
   const playerFrame = useCurrentPlayerFrame(playerRef, isPlayerReady);
 
   React.useEffect(() => {
-    if (import.meta.env.DEV && appMode === 'editor' && normalizedTimelineSegments.length > 0) {
-      console.table(normalizedTimelineSegments.map((seg, idx) => ({
-        idx,
-        start: Number(seg.start).toFixed(3),
-        end: Number(seg.end).toFixed(3),
-        leftPct: (((Number(seg.start) - startTime) / totalDuration) * 100).toFixed(2),
-        widthPct: (((Number(seg.end) - Number(seg.start)) / totalDuration) * 100).toFixed(2),
-      })));
+    if (appMode === 'editor' && normalizedTimelineSegments.length > 0) {
+      console.log('[Timeline] computed range:', { startTime, totalEnd, totalDuration, segCount: segments.length });
     }
-  }, [appMode, normalizedTimelineSegments, startTime, totalDuration]);
+  }, [appMode, normalizedTimelineSegments, startTime, totalDuration, totalEnd, segments]);
 
   const activeTimelineSegment = appMode === 'clipper'
     ? normalizedTimelineSegments[0]
@@ -298,7 +296,7 @@ export default function Timeline({
             <ChevronsRight />
           </Button>
           <span className="nle-timeline-timecode">
-            {formatClock(currentTime)} <span>/</span> {formatDuration(totalDuration)}
+            {formatClock(appMode === 'editor' ? Math.max(0, currentTime - startTime) : currentTime)} <span>/</span> {formatDuration(totalDuration)}
           </span>
         </div>
 
@@ -316,7 +314,7 @@ export default function Timeline({
           <input
             type="range"
             min="0.8"
-            max="2.2"
+            max="5"
             step="0.1"
             value={zoom}
             onChange={(e) => setZoom(parseFloat(e.target.value))}
@@ -356,7 +354,7 @@ export default function Timeline({
                   style={{ left: `${(tickSec / totalDuration) * 100}%` }}
                 >
                   <div className="nle-timeline-ruler-line" />
-                  <span>{formatRulerLabel(startTime + tickSec)}</span>
+                  <span>{formatRulerLabel(appMode === 'clipper' ? startTime + tickSec : tickSec)}</span>
                 </div>
               ))}
             </div>
@@ -394,7 +392,7 @@ export default function Timeline({
                       <Badge variant="secondary" className="nle-timeline-row-badge">
                         V{idx + 1}
                       </Badge>
-                      {idx === 0 && (
+                      {idx === 0 && appMode === 'clipper' && (
                         <Badge variant="secondary" className="nle-timeline-fit-badge">
                           Fit
                         </Badge>
@@ -402,7 +400,7 @@ export default function Timeline({
 
                       <div
                         className={`nle-timeline-segment-hit ${active ? "active" : ""}`}
-                        style={{ left: `${leftPct}%`, width: `${Math.max(widthPct, 2)}%` }}
+                        style={{ left: `${leftPct}%`, width: `${Math.max(widthPct, (4 / trackWidth) * 100)}%` }}
                         onMouseDown={(event) => {
                           event.stopPropagation();
                           if (setActiveSegmentIndex) setActiveSegmentIndex(idx);

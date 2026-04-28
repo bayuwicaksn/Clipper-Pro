@@ -215,16 +215,17 @@ const CustomPreview = ({
     }
   }, [seekRequested]);
 
-  // Handle segment start changes
+  // Handle segment start changes — only when paused to avoid stutter during playback transitions
   useEffect(() => {
     segmentEndLockRef.current = false;
     if (videoRef.current && !playing && isVideoReady) {
       if (Math.abs(videoRef.current.currentTime - startSecs) > 0.1) {
         videoRef.current.currentTime = startSecs;
+        if (backgroundVideoRef.current) backgroundVideoRef.current.currentTime = startSecs;
         listenersRef.current['frameupdate']?.forEach(cb => cb());
       }
     }
-  }, [startSecs, playing, isVideoReady]);
+  }, [startSecs, isVideoReady]);
 
   // Time Updates + Caption iframe sync
   useEffect(() => {

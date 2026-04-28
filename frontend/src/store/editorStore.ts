@@ -370,12 +370,9 @@ export const useEditorStore = create<EditorState>((set, get) => ({
     const nextIndex = activeSegmentIndex + 1;
     
     if (nextIndex < segments.length) {
-      const nextStart = segments[nextIndex].start;
-      set({
-        activeSegmentIndex: nextIndex,
-        currentTime: nextStart,
-        seekRequested: nextStart
-      });
+      // Continuous playback — only advance index, no seek.
+      // Video keeps playing naturally; startSecs effect won't seek because playing=true.
+      set({ activeSegmentIndex: nextIndex });
       return;
     }
     set({ isPlaying: false });
@@ -406,15 +403,29 @@ export const useEditorStore = create<EditorState>((set, get) => ({
       if (data.progress !== undefined) setStatusMessage(`AI sedang membedah video... (${data.progress}%)`);
       if (data.cuts) {
         const clipDuration = Math.max(0, clipEnd - clipStart);
-        const normalizedCuts = data.cuts
-          .map((raw: number) => {
-            const t = Number(raw);
-            if (!Number.isFinite(t)) return null;
-            return t < clipStart - 0.001 && t <= clipDuration + 1 ? clipStart + t : t;
-          })
-          .filter((t: number | null): t is number => t !== null && t > clipStart + 1 && t < clipEnd - 1)
+
+        // Parse and filter valid numeric cuts
+        const rawCuts: number[] = data.cuts
+          .map((raw: number) => Number(raw))
+          .filter((t: number) => Number.isFinite(t) && t >= 0);
+
+        // Simple detection: if the largest cut fits within clipDuration,
+        // cuts are relative (0-based). Otherwise they're absolute.
+        const maxCut = rawCuts.length > 0 ? Math.max(...rawCuts) : 0;
+        const cutsAreRelative = rawCuts.length > 0 && maxCut <= clipDuration + 1 && clipStart > 1;
+        const offset = cutsAreRelative ? clipStart : 0;
+
+        console.log('[AutoSplit] raw cuts:', rawCuts);
+        console.log('[AutoSplit] clipStart:', clipStart, 'clipEnd:', clipEnd, 'clipDuration:', clipDuration);
+        console.log('[AutoSplit] maxCut:', maxCut, 'relative?', cutsAreRelative, 'offset:', offset);
+
+        const normalizedCuts = rawCuts
+          .map((t: number) => t + offset)
+          .filter((t: number) => t > clipStart + 1 && t < clipEnd - 1)
           .sort((a: number, b: number) => a - b)
           .filter((t: number, idx: number, arr: number[]) => idx === 0 || Math.abs(t - arr[idx - 1]) > 0.25);
+
+        console.log('[AutoSplit] normalizedCuts:', normalizedCuts);
         let newSegs: Segment[] = [];
         let lastT = clipStart;
         [...normalizedCuts, clipEnd].forEach((t) => {
@@ -428,6 +439,7 @@ export const useEditorStore = create<EditorState>((set, get) => ({
           lastT = t;
         });
         setSegments(newSegs);
+        console.log('[AutoSplit] final segments:', newSegs.map(s => ({ id: s.id, start: s.start, end: s.end })));
         setActiveSegmentIndex(0);
         notify(`Automatically split into ${newSegs.length} scenes!`, "success");
         eventSource.close();

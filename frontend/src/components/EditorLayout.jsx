@@ -114,24 +114,22 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
     }
   }, [clips, activeClipIndex]);
 
-  // Keep Editor segment bounds in sync when Clipper changes the clip without
-  // wiping player transform settings already adjusted in Editor.
+  // In clipper mode, the segment is derived locally (activeSegment above).
+  // Do NOT overwrite the shared segments store — that destroys editor auto-split data.
+  // Only initialize segments if they are completely empty (first load, no saved state).
   React.useEffect(() => {
     if (appMode !== 'clipper' || !activeClip || activeClipEnd <= activeClipStart) return;
+    if (segments.length > 0) return; // Preserve existing segments (editor auto-split data)
 
-    setSegments(prev => {
-      const current = prev[activeSegmentIndex] || prev[0] || {};
-      return [{
-        ...current,
-        id: current.id || 'clipper-main',
-        start: activeClipStart,
-        end: activeClipEnd,
-        crop_x: current.crop_x ?? activeClip.custom_crop_x ?? 0.5,
-        crop_y: current.crop_y ?? 0.5,
-        crop_z: current.crop_z ?? getStoredPlayerSize(),
-        auto_background_enabled: activeClip.auto_background_enabled !== false
-      }];
-    });
+    setSegments([{
+      id: 'clipper-main',
+      start: activeClipStart,
+      end: activeClipEnd,
+      crop_x: activeClip.custom_crop_x ?? 0.5,
+      crop_y: 0.5,
+      crop_z: getStoredPlayerSize(),
+      auto_background_enabled: activeClip.auto_background_enabled !== false
+    }]);
     setActiveSegmentIndex(0);
   }, [
     appMode,
