@@ -40,9 +40,9 @@ COPY requirements.txt .
 # Install PyTorch CPU dulu (bisa diganti cu121 untuk CUDA)
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
-        torch \
-        torchvision \
-        --index-url https://download.pytorch.org/whl/cpu
+    torch \
+    torchvision \
+    --index-url https://download.pytorch.org/whl/cpu
 
 # Install remaining requirements
 RUN pip install --no-cache-dir -r requirements.txt
@@ -66,7 +66,7 @@ USER workeruser
 
 # Health check — cek apakah worker process berjalan
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s \
-  CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
+    CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Entry point
 CMD ["python3", "worker.py"]
