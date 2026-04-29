@@ -165,8 +165,7 @@ def pull_messages():
         try:
             subscriber = pubsub_v1.SubscriberClient()
             subscription_path = subscriber.subscription_path(project_id, subscription_id)
-
-            logger.info(f"Listening on {subscription_path}")
+            logger.info(f"Connecting to Pub/Sub: {subscription_path}")
 
             def callback(message):
                 try:
@@ -180,10 +179,18 @@ def pull_messages():
 
             streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
 
+            logger.info(f"Listening for messages on {subscription_id}...")
             with subscriber:
-                streaming_pull_future.result()
+                try:
+                    streaming_pull_future.result()
+                except Exception as e:
+                    if "NotFound" in str(e) or "404" in str(e):
+                        logger.error(f"CRITICAL: Subscription '{subscription_id}' not found in project '{project_id}'. "
+                                     "Please ensure it exists in GCP Console or check your GCP_PROJECT_ID env.")
+                    streaming_pull_future.cancel()
+                    raise e
         except Exception as e:
-            logger.error(f"Pub/Sub Listener Error: {e}", exc_info=True)
+            logger.error(f"Pub/Sub Listener Error: {e}")
             time.sleep(retry_delay)
             retry_delay = min(retry_delay * 2, 300)
 
