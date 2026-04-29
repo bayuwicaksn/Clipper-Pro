@@ -16,6 +16,8 @@ import json
 import logging
 import signal
 import time
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from concurrent.futures import ThreadPoolExecutor
 
 # Setup logging
@@ -27,6 +29,26 @@ logging.basicConfig(
 logger = logging.getLogger("worker_gpu")
 
 
+# ── Health Check HTTP Server ──────────────────────────────────────────
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(b'{"status":"ok","worker":"gpu"}')
+
+    def log_message(self, format, *args):
+        pass  # suppress access logs
+
+
+def start_health_server():
+    port = int(os.getenv("PORT", "8080"))
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    logger.info(f"Health server listening on port {port}")
+    server.serve_forever()
+
+
+# ── Pub/Sub Worker ────────────────────────────────────────────────────
 def process_job(job_data: dict) -> None:
     """
     Proses satu job dari Pub/Sub.
@@ -54,7 +76,6 @@ def process_job(job_data: dict) -> None:
 def pull_messages():
     """
     Pull messages dari Google Cloud Pub/Sub.
-    Placeholder — implementasi penuh di Phase 3.
     """
     project_id = os.getenv("GCP_PROJECT_ID")
     subscription_id = os.getenv("PUBSUB_SUBSCRIPTION_JOBS", "clipper-jobs-sub")
@@ -118,5 +139,9 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
 
-    # Start pulling
+    # Jalankan health server di background thread
+    health_thread = threading.Thread(target=start_health_server, daemon=True)
+    health_thread.start()
+
+    # Start pulling messages di main thread
     pull_messages()
