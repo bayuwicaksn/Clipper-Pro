@@ -60,6 +60,7 @@ jobs:
             --tag $IMAGE:${{ github.sha }} \
             --cache-from $IMAGE:latest \
             --file frontend/Dockerfile \
+            --build-arg VITE_API_BASE=${{ secrets.BACKEND_URL }} \
             frontend/
           
           docker push $IMAGE:latest
