@@ -29,4 +29,5 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 8080
 
-CMD ["nginx", "-g", "daemon off;"]
+# Gunakan flag -g untuk override pid ke /tmp (menghindari error duplicate di nginx.conf utama)
+CMD ["nginx", "-g", "daemon off; pid /tmp/nginx.pid;"]
