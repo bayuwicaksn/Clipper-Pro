@@ -35,21 +35,63 @@ jobs:
           filters: |
             frontend:
               - 'frontend/**'
+              - '.github/workflows/deploy.yml'
             backend:
               - 'backend/**'
               - 'shared/**'
+              - '.github/workflows/deploy.yml'
             worker_gpu:
               - 'worker_gpu/**'
               - 'shared/**'
+              - '.github/workflows/deploy.yml'
             worker_node:
               - 'worker_node/**'
               - 'shared/**'
+              - '.github/workflows/deploy.yml'
+
+  ensure-pubsub:
+    name: Ensure Pub/Sub Resources
+    runs-on: ubuntu-latest
+    needs: changes
+    if: |
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Create Pub/Sub topics and subscriptions
+        run: |
+          JOBS_TOPIC="${{ secrets.PUBSUB_TOPIC_JOBS || 'clipper-jobs' }}"
+          JOBS_SUB="${{ secrets.PUBSUB_SUBSCRIPTION_JOBS || 'clipper-jobs-sub' }}"
+          CAPTION_TOPIC="${{ secrets.PUBSUB_TOPIC_CAPTION || 'clipper-caption-jobs' }}"
+          CAPTION_SUB="${{ secrets.PUBSUB_SUBSCRIPTION_CAPTION || 'clipper-caption-jobs-sub' }}"
+
+          gcloud pubsub topics describe "$JOBS_TOPIC" >/dev/null 2>&1 || \
+            gcloud pubsub topics create "$JOBS_TOPIC"
+          gcloud pubsub topics describe "$CAPTION_TOPIC" >/dev/null 2>&1 || \
+            gcloud pubsub topics create "$CAPTION_TOPIC"
+
+          gcloud pubsub subscriptions describe "$JOBS_SUB" >/dev/null 2>&1 || \
+            gcloud pubsub subscriptions create "$JOBS_SUB" --topic="$JOBS_TOPIC"
+          gcloud pubsub subscriptions describe "$CAPTION_SUB" >/dev/null 2>&1 || \
+            gcloud pubsub subscriptions create "$CAPTION_SUB" --topic="$CAPTION_TOPIC"
 
   # ── Job 1: Build & Push Frontend ─────────────────────────────────────
   build-frontend:
     name: Build Frontend
     runs-on: ubuntu-latest
-    needs: changes
+    needs: [changes, ensure-pubsub]
     if: |
       (github.event_name == 'push' && needs.changes.outputs.frontend == 'true') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.service == 'frontend' || github.event.inputs.service == 'all'))
@@ -114,7 +156,7 @@ jobs:
   build-backend:
     name: Build Backend
     runs-on: ubuntu-latest
-    needs: changes
+    needs: [changes, ensure-pubsub]
     if: |
       (github.event_name == 'push' && needs.changes.outputs.backend == 'true') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.service == 'backend' || github.event.inputs.service == 'all'))
@@ -184,7 +226,7 @@ jobs:
   build-worker-gpu:
     name: Build Worker GPU
     runs-on: ubuntu-latest
-    needs: changes
+    needs: [changes, ensure-pubsub]
     if: |
       (github.event_name == 'push' && needs.changes.outputs.worker_gpu == 'true') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.service == 'worker_gpu' || github.event.inputs.service == 'all'))
@@ -270,7 +312,7 @@ jobs:
   build-worker-node:
     name: Build Worker Node
     runs-on: ubuntu-latest
-    needs: changes
+    needs: [changes, ensure-pubsub]
     if: |
       (github.event_name == 'push' && needs.changes.outputs.worker_node == 'true') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.service == 'worker_node' || github.event.inputs.service == 'all'))
