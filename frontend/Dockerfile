@@ -29,4 +29,5 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 8080
 
-CMD ["nginx", "-g", "daemon off;"]
+# Ensure nginx can write to /tmp and use a custom PID location
+CMD ["nginx", "-g", "daemon off; pid /tmp/nginx.pid;"]

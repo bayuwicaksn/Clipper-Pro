@@ -77,6 +77,8 @@ jobs:
             --platform managed \
             --allow-unauthenticated \
             --port 8080 \
+            --timeout 300 \
+            --cpu-boost \
             --memory 512Mi \
             --cpu 1 \
             --min-instances 0 \
