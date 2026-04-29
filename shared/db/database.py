@@ -2,7 +2,7 @@ from sqlmodel import SQLModel, create_engine, Session
 from ..config import settings
 from .models import Job  # Ensure models are imported for SQLModel to recognize them
 
-db_url = settings.DATABASE_URL
+db_url = settings.DATABASE_URL or "sqlite:///clipper.db"
 
 # Handle Postgres connection strings (fix for SQLAlchemy/Heroku/Supabase)
 if db_url.startswith("postgres://"):
