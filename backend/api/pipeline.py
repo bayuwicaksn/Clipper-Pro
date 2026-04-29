@@ -54,7 +54,7 @@ async def start_processing(data: ProcessRequest, session: Session = Depends(get_
 
     # Publish to Pub/Sub
     project_id = os.getenv("GCP_PROJECT_ID")
-    topic_id = os.getenv("PUBSUB_TOPIC_JOBS", "clipper-jobs")
+    topic_id = os.getenv("PUBSUB_TOPIC_JOBS") or "clipper-jobs"
 
     if project_id:
         try:
@@ -75,7 +75,7 @@ async def start_processing(data: ProcessRequest, session: Session = Depends(get_
             # Fallback or error based on preference. For now, we'll mark as error if Pub/Sub fails in production
             if os.getenv("ENVIRONMENT") == "production":
                 crud.update_job_status(session, job_id, 'error', error=f"Pub/Sub Error: {str(e)}")
-                raise HTTPException(status_code=500, detail="Failed to queue job")
+                raise HTTPException(status_code=500, detail=f"Failed to queue job: {e}")
     
     # In local/dev without GCP_PROJECT_ID, we still allow the response but logger warns
     else:

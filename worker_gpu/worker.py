@@ -123,7 +123,7 @@ def push_to_caption_queue(job_id, job_dir, clips, config):
     Publish a message to the captioning topic for worker_node.
     """
     project_id = os.getenv("GCP_PROJECT_ID")
-    topic_id = os.getenv("PUBSUB_TOPIC_CAPTION", "clipper-caption-jobs")
+    topic_id = os.getenv("PUBSUB_TOPIC_CAPTION") or "clipper-caption-jobs"
 
     if not project_id:
         logger.warning(f"[{job_id}] GCP_PROJECT_ID not set, skipping caption queue push")
@@ -151,7 +151,7 @@ def push_to_caption_queue(job_id, job_dir, clips, config):
 # ── Pub/Sub Listener ──────────────────────────────────────────────────
 def pull_messages():
     project_id = os.getenv("GCP_PROJECT_ID")
-    subscription_id = os.getenv("PUBSUB_SUBSCRIPTION_JOBS", "clipper-jobs-sub")
+    subscription_id = os.getenv("PUBSUB_SUBSCRIPTION_JOBS") or "clipper-jobs-sub"
 
     if not project_id:
         logger.warning("GCP_PROJECT_ID not set — running in demo mode")

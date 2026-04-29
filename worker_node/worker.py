@@ -133,7 +133,7 @@ def process_caption_job(job_data: dict) -> None:
 # ── Pub/Sub Listener ──────────────────────────────────────────────────
 def pull_messages():
     project_id = os.getenv("GCP_PROJECT_ID")
-    subscription_id = os.getenv("PUBSUB_SUBSCRIPTION_CAPTION", "clipper-caption-jobs-sub")
+    subscription_id = os.getenv("PUBSUB_SUBSCRIPTION_CAPTION") or "clipper-caption-jobs-sub"
 
     if not project_id:
         logger.warning("GCP_PROJECT_ID not set — idle mode")
