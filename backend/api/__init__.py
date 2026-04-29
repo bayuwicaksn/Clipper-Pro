@@ -7,8 +7,8 @@ import os
 import queue
 from datetime import datetime
 
-from ..core.utils import get_source_transcript, app_logger as logger
-from ..utils.helpers import (
+from shared.core.utils import get_source_transcript, app_logger as logger
+from shared.utils.helpers import (
     resolve_job_dir as _resolve_job_dir,
     get_clip_dir as _get_clip_dir,
     timestamp_to_seconds,

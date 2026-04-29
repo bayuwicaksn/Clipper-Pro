@@ -1,5 +1,5 @@
 ﻿"""
-ClipperApp â€” Pipeline Router (FastAPI)
+ClipperApp Ã¢â‚¬â€ Pipeline Router (FastAPI)
 Handles: processing jobs, export, progress streaming (SSE), status.
 """
 
@@ -23,8 +23,8 @@ from . import (
     create_progress_callback, slugify, logger,
     timestamp_to_seconds, filter_words_by_range
 )
-from ..db import crud
-from db.database import get_session, engine
+from shared.db import crud
+from shared.db.database import get_session, engine
 from .schemas import ProcessRequest, ExportRequest, ReprocessRequest, JobResponse
 from ..services import job_service
 
@@ -33,34 +33,53 @@ router = APIRouter(prefix="/api", tags=["pipeline"])
 
 
 
-# â”€â”€â”€ Internal Pipeline Runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Internal Pipeline Runner Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 def _run_pipeline(job_id, job_dir, config, progress_callback):
     """Execute the full clipping pipeline via job_service."""
     job_service.start_job(job_id, job_dir, config, progress_callback)
 
 
-# â”€â”€â”€ Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Routes Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 @router.post('/process')
 async def start_processing(data: ProcessRequest, session: Session = Depends(get_session)):
-    """Start the full clipping pipeline."""
+    """Start the full clipping pipeline by publishing to Pub/Sub."""
     if not data.url.strip():
         raise HTTPException(status_code=400, detail='YouTube URL is required')
 
     job_id = str(uuid.uuid4())[:8]
-    job_dir = os.path.join(WORKSPACE, job_id)
-    os.makedirs(job_dir, exist_ok=True)
-
     config = data.model_dump()
 
+    # Create job in database
     crud.create_job(session, job_id, config)
 
-    callback = create_progress_callback(job_id)
-    thread = threading.Thread(
-        target=_run_pipeline,
-        args=(job_id, job_dir, config, callback),
-        daemon=True
-    )
-    thread.start()
+    # Publish to Pub/Sub
+    project_id = os.getenv("GCP_PROJECT_ID")
+    topic_id = os.getenv("PUBSUB_TOPIC_JOBS", "clipper-jobs")
+
+    if project_id:
+        try:
+            from google.cloud import pubsub_v1
+            publisher = pubsub_v1.PublisherClient()
+            topic_path = publisher.topic_path(project_id, topic_id)
+            
+            message_data = json.dumps({
+                "job_id": job_id,
+                "config": config,
+                "timestamp": time.time()
+            }).encode("utf-8")
+            
+            publisher.publish(topic_path, message_data)
+            logger.info(f"[Pub/Sub] Published job {job_id} to {topic_id}")
+        except Exception as e:
+            logger.error(f"[Pub/Sub] Failed to publish: {e}")
+            # Fallback or error based on preference. For now, we'll mark as error if Pub/Sub fails in production
+            if os.getenv("ENVIRONMENT") == "production":
+                crud.update_job_status(session, job_id, 'error', error=f"Pub/Sub Error: {str(e)}")
+                raise HTTPException(status_code=500, detail="Failed to queue job")
+    
+    # In local/dev without GCP_PROJECT_ID, we still allow the response but logger warns
+    else:
+        logger.warning(f"[Dev] GCP_PROJECT_ID not set. Job {job_id} created but not queued.")
 
     return {'job_id': job_id, 'status': 'queued'}
 
@@ -155,7 +174,7 @@ async def stream_progress(job_id: str):
                 if event.get('step') in ('done', 'error'):
                     break
             except queue_module.Empty:
-                # Non-blocking check â€” yield heartbeat every ~10 seconds
+                # Non-blocking check Ã¢â‚¬â€ yield heartbeat every ~10 seconds
                 await asyncio.sleep(1)
                 yield 'data: ' + json.dumps({'step': 'heartbeat', 'message': 'Processing...', 'progress': -1}) + '\n\n'
 

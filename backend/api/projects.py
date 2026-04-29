@@ -14,8 +14,8 @@ from . import (
     WORKSPACE, resolve_job_dir, get_clip_dir,
     is_new_layout, robust_rmtree, logger
 )
-from ..db import crud
-from ..db.database import get_session
+from shared.db import crud
+from shared.db.database import get_session
 from .schemas import ProjectResponse
 
 router = APIRouter(prefix="/api", tags=["projects"])

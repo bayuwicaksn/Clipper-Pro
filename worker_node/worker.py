@@ -7,6 +7,14 @@ import time
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
+# Import caption generator from src
+from src.caption.generator import (
+    generate_caption_composition, 
+    render_composition, 
+    composite_transparent_captions
+)
+
+# Setup logging
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -23,7 +31,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.wfile.write(b'{"status":"ok","worker":"node"}')
 
     def log_message(self, format, *args):
-        pass  # suppress access logs
+        pass
 
 
 def start_health_server():
@@ -33,13 +41,96 @@ def start_health_server():
     server.serve_forever()
 
 
-# ── Pub/Sub Worker ────────────────────────────────────────────────────
+# ── Rendering Logic ───────────────────────────────────────────────────
 def process_caption_job(job_data: dict) -> None:
-    job_id = job_data.get("job_id", "unknown")
-    logger.info(f"[Job {job_id}] Starting caption rendering...")
-    # Phase 3 implementation here
+    """
+    Render captions and composite them for all clips in a job.
+    """
+    job_id = job_data.get("job_id")
+    job_dir = job_data.get("job_dir")
+    clips = job_data.get("clips", [])
+    config = job_data.get("config", {})
+
+    logger.info(f"[{job_id}] Received caption job for {len(clips)} clips.")
+
+    for i, clip in enumerate(clips):
+        try:
+            clip_index = clip.get("clip_index", i)
+            logger.info(f"[{job_id}] Rendering captions for Clip {clip_index}")
+            
+            # 1. Determine paths
+            # In Docker, we assume the shared workspace is mounted at the same path or we use relative
+            # For Cloud Run, we might need to download from GCS first, but if we use local disk for now:
+            
+            # Find the reframed video produced by worker_gpu
+            # Usually it's in clips/clip_XX/exports/clip_XX_vXXXX.mp4
+            # We need to find it based on clip['filename']
+            clip_folder = os.path.join(job_dir, 'clips', f'clip_{clip_index + 1:02d}')
+            exports_dir = os.path.join(clip_folder, 'exports')
+            
+            reframed_video = os.path.join(exports_dir, clip['filename'])
+            
+            if not os.path.exists(reframed_video):
+                logger.error(f"[{job_id}] Reframed video not found: {reframed_video}")
+                continue
+
+            # 2. Prepare Caption Data
+            # Prepare word-level transcript mapped to clip-local time
+            from shared.utils.helpers import timestamp_to_seconds
+            
+            transcript_words = clip.get('transcript', [])
+            clip_start = timestamp_to_seconds(clip.get('start_time', '00:00:00'))
+            
+            custom_words = []
+            for w in transcript_words:
+                local_start = w.get('start', 0) - clip_start
+                local_end = w.get('end', 0) - clip_start
+                if local_end > 0:
+                    custom_words.append({
+                        'word': w.get('word', w.get('text', '')),
+                        'start': max(0, local_start),
+                        'end': max(0, local_end)
+                    })
+
+            if not custom_words:
+                logger.warning(f"[{job_id}] No words for clip {clip_index}, skipping captions.")
+                continue
+
+            # 3. Generate HTML Composition
+            caption_settings = config.get('caption_settings', {})
+            temp_dir = os.path.join(clip_folder, 'temp_render')
+            os.makedirs(temp_dir, exist_ok=True)
+            
+            composition_html = os.path.join(temp_dir, 'index.html')
+            
+            generate_caption_composition(
+                video_src=reframed_video,
+                output_html=composition_html,
+                words=custom_words,
+                settings=caption_settings,
+                video_w=1080, # Assuming 9:16
+                video_h=1920,
+            )
+
+            # 4. Render to Transparent MOV
+            overlay_mov = os.path.join(temp_dir, 'overlay.mov')
+            render_composition(composition_html, overlay_mov)
+
+            # 5. Composite with FFmpeg
+            final_output = os.path.join(exports_dir, f"{clip['filename'].replace('.mp4', '')}_final.mp4")
+            composite_transparent_captions(reframed_video, overlay_mov, final_output)
+
+            logger.info(f"[{job_id}] Clip {clip_index} render complete: {final_output}")
+
+            # 6. Cleanup temp
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        except Exception as e:
+            logger.error(f"[{job_id}] Failed rendering clip {i}: {e}", exc_info=True)
 
 
+# ── Pub/Sub Listener ──────────────────────────────────────────────────
 def pull_messages():
     project_id = os.getenv("GCP_PROJECT_ID")
     subscription_id = os.getenv("PUBSUB_SUBSCRIPTION_CAPTION", "clipper-caption-jobs-sub")
@@ -62,17 +153,17 @@ def pull_messages():
                 process_caption_job(data)
                 message.ack()
             except Exception as e:
-                logger.error(f"Error: {e}", exc_info=True)
+                logger.error(f"Error processing caption job: {e}", exc_info=True)
                 message.nack()
 
         streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
         with subscriber:
             streaming_pull_future.result()
 
-    except ImportError:
-        logger.error("google-cloud-pubsub not installed")
-        while True:
-            time.sleep(60)
+    except Exception as e:
+        logger.error(f"Pub/Sub Listener Error: {e}", exc_info=True)
+        time.sleep(10)
+        pull_messages()
 
 
 def handle_shutdown(signum, frame):
@@ -81,14 +172,10 @@ def handle_shutdown(signum, frame):
 
 
 if __name__ == "__main__":
-    logger.info("Clipper-Pro Node Worker Starting")
-
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
 
-    # Jalankan health server di background thread
     health_thread = threading.Thread(target=start_health_server, daemon=True)
     health_thread.start()
 
-    # Jalankan Pub/Sub consumer di main thread
     pull_messages()

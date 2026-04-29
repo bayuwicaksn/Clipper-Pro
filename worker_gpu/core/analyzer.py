@@ -1,5 +1,5 @@
-"""
-Analyzer — GPT-4 powered highlight detection from video transcripts
+﻿"""
+Analyzer â€” GPT-4 powered highlight detection from video transcripts
 """
 
 import json
@@ -36,7 +36,7 @@ def parse_srt(srt_path):
     return '\n'.join(lines)
 
 
-# ─── System Prompt ────────────────────────────────────────────────────
+# â”€â”€â”€ System Prompt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Separated from user prompt for better instruction following.
 # Contains persona, hard rules, and output schema.
 SYSTEM_PROMPT = """You are a world-class short-form content strategist who has edited for top YouTube creators.
@@ -44,7 +44,7 @@ SYSTEM_PROMPT = """You are a world-class short-form content strategist who has e
 HARD RULES:
 1. Respond ONLY with a valid JSON array. No markdown fences, no explanation, no preamble.
 2. Every string value (title, hook_text, description, tags) MUST be in the SAME language as the transcript. Never translate to English unless the transcript is already in English.
-3. Timestamps MUST use HH:MM:SS.mmm format and MUST align to the nearest subtitle boundary shown in the transcript — never invent timestamps between existing ones.
+3. Timestamps MUST use HH:MM:SS.mmm format and MUST align to the nearest subtitle boundary shown in the transcript â€” never invent timestamps between existing ones.
 4. Each clip MUST start at the beginning of a sentence and end at the end of a sentence. Never cut mid-sentence.
 5. Clips MUST NOT overlap in time ranges."""
 
@@ -80,7 +80,7 @@ CLIP CONSTRAINTS:
 - Duration: {min_dur}-{max_dur} seconds per clip.
 - No overlapping time ranges.
 - Start at the beginning of a complete thought/sentence.
-- End at a natural conclusion — never mid-sentence.
+- End at a natural conclusion â€” never mid-sentence.
 
 HOOK SCORE CRITERIA (score 1-100):
 - How strong are the first 3 seconds? Would a viewer stop scrolling?
@@ -158,7 +158,7 @@ TRANSCRIPT:
 
         response_text = response.choices[0].message.content.strip()
 
-    # Clean response — remove markdown code fences if present
+    # Clean response â€” remove markdown code fences if present
     response_text = re.sub(r'^```(?:json)?\s*', '', response_text)
     response_text = re.sub(r'\s*```$', '', response_text)
 
@@ -198,7 +198,7 @@ TRANSCRIPT:
     # Remove overlapping clips (keep higher hook_score)
     valid_highlights = _remove_overlaps(valid_highlights)
     
-    # Sort by hook_score descending — best clips first
+    # Sort by hook_score descending â€” best clips first
     valid_highlights.sort(key=lambda x: x.get('hook_score', 0), reverse=True)
 
     if progress_callback:
@@ -207,9 +207,9 @@ TRANSCRIPT:
     return valid_highlights
 
 
-# ─── Helpers ──────────────────────────────────────────────────────────
+# â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-from worker_gpu.core.utils import timestamp_to_seconds
+from .utils import timestamp_to_seconds
 
 
 def _extract_timestamps(transcript_text):
@@ -282,7 +282,7 @@ def _remove_overlaps(highlights):
         curr_start = timestamp_to_seconds(current['start_time'])
         
         if curr_start < prev_end:
-            # Overlap detected — keep the one with higher hook_score
+            # Overlap detected â€” keep the one with higher hook_score
             if current.get('hook_score', 0) > prev.get('hook_score', 0):
                 print(f"[Analyzer] Overlap: keeping '{current['title']}' (score {current.get('hook_score')}) over '{prev['title']}' (score {prev.get('hook_score')})")
                 result[-1] = current
@@ -316,10 +316,10 @@ Tags: {', '.join(old_metadata.get('tags', []))}
 Generate a completely new set of metadata for this exact segment.
 
 Provide:
-1. **title** — eye-catching title with emoji (for YouTube Shorts/TikTok)
-2. **hook_text** — attention-grabbing 1-2 sentence hook (read aloud at the start)
-3. **description** — short SEO description
-4. **tags** — array of relevant hashtags (without #)
+1. **title** â€” eye-catching title with emoji (for YouTube Shorts/TikTok)
+2. **hook_text** â€” attention-grabbing 1-2 sentence hook (read aloud at the start)
+3. **description** â€” short SEO description
+4. **tags** â€” array of relevant hashtags (without #)
 
 IMPORTANT: The `title`, `hook_text`, `description`, and `tags` MUST be written in the exact same language as the spoken language in the transcript. Do NOT translate them to English if the transcript is in Indonesian or another language.
 
@@ -327,7 +327,7 @@ Respond ONLY with a valid JSON object matching the format below. No markdown, no
 
 Example format:
 {{
-  "title": "🔥 The Secret Nobody Talks About",
+  "title": "ðŸ”¥ The Secret Nobody Talks About",
   "hook_text": "You won't believe what happens next...",
   "description": "An incredible moment that changes everything",
   "tags": ["viral", "podcast", "motivation"]

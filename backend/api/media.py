@@ -58,7 +58,7 @@ async def get_caption_composition(job_id: str, request: Request):
     Returns the generated HTML composition.
     """
     from fastapi.responses import HTMLResponse
-    from ..core.caption_composition import generate_caption_composition
+    from shared.core.caption_composition import generate_caption_composition
     import tempfile
 
     job_dir = resolve_job_dir(job_id)
