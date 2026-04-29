@@ -393,7 +393,7 @@ def _extract_audio(video_path, audio_path):
     cmd = ['ffmpeg', '-y', '-i', video_path, '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', audio_path]
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-def _transcribe_audio(audio_path):
+def _transcribe_audio(audio_path, offset=0):
     from openai import OpenAI
     client = OpenAI()
     with open(audio_path, 'rb') as f:
@@ -404,8 +404,74 @@ def _transcribe_audio(audio_path):
     raw_words = getattr(transcription, 'words', None) or []
     for w in raw_words:
         text = w.word if hasattr(w, 'word') else w.get('word', '')
-        start = w.start if hasattr(w, 'start') else w.get('start', 0)
-        end = w.end if hasattr(w, 'end') else w.get('end', 0)
+        start = (w.start if hasattr(w, 'start') else w.get('start', 0)) + offset
+        end = (w.end if hasattr(w, 'end') else w.get('end', 0)) + offset
         if text.strip():
             words.append({'word': text.strip(), 'start': start, 'end': end})
     return words
+
+def _transcribe_audio_gpt4o(audio_path, model_name='gpt-4o-mini-transcribe', offset=0):
+    """
+    New high-precision transcription using GPT-4o Audio API.
+    Provides better conversational context than Whisper.
+    """
+    from openai import OpenAI
+    import base64, json, re, logging
+    client = OpenAI()
+    logger = logging.getLogger('app')
+
+    # Read audio and encode to base64
+    with open(audio_path, "rb") as audio_file:
+        audio_b64 = base64.b64encode(audio_file.read()).decode('utf-8')
+
+    model = "gpt-4o-audio-preview" if "mini" not in model_name else "gpt-4o-audio-preview" 
+
+    response = client.chat.completions.create(
+        model=model,
+        modalities=["text"],
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Transcribe this audio into a JSON array of words. Each object must have 'word', 'start' (float seconds), and 'end' (float seconds). Output ONLY the JSON array."},
+                    {"type": "input_audio", "input_audio": {"data": audio_b64, "format": "mp3"}}
+                ]
+            }
+        ]
+    )
+
+    raw_content = response.choices[0].message.content
+    try:
+        json_str = re.search(r'\[.*\]', raw_content, re.DOTALL).group(0)
+        words = json.loads(json_str)
+        # Apply offset
+        for w in words:
+            w['start'] += offset
+            w['end'] += offset
+        return words
+    except Exception as e:
+        logger.error(f"[TRANSCRIPT] Parsing failed: {e}. Raw: {raw_content[:200]}")
+        # Fallback to standard whisper if this fails
+        return _transcribe_audio(audio_path, offset=offset)
+
+def _refine_transcript_gpt4o(transcript_data):
+    """
+    Optional: Use GPT-4o text model to clean up transcript (grammar, filler words).
+    """
+    from openai import OpenAI
+    import json, re
+    client = OpenAI()
+    
+    prompt = f"Refine this word-level transcript. Keep it natural but remove excessive 'ums' and 'uhs'. Maintain exactly the same JSON structure with 'word', 'start', and 'end' keys. Return ONLY the JSON array.\n\n{json.dumps(transcript_data)}"
+    
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}]
+    )
+    
+    try:
+        raw = response.choices[0].message.content
+        json_str = re.search(r'\[.*\]', raw, re.DOTALL).group(0)
+        return json.loads(json_str)
+    except:
+        return transcript_data

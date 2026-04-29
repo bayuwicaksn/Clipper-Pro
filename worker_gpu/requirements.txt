@@ -1,0 +1,26 @@
+# PyTorch CPU only (lebih kecil, cukup untuk mediapipe)
+# Ganti dengan cu121 jika butuh CUDA penuh
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.2.0
+torchvision>=0.17.0
+
+# AI & ML
+mediapipe>=0.10.11
+opencv-python-headless>=4.9.0
+openai-whisper>=20231117
+google-generativeai>=0.5.0
+openai>=1.23.0
+
+# Video Processing
+yt-dlp>=2024.4.9
+ffmpeg-python>=0.2.0
+
+# GCP
+google-cloud-pubsub>=2.21.0
+google-cloud-storage>=2.16.0
+
+# Utils
+python-dotenv>=1.0.0
+pydantic>=2.6.0
+httpx>=0.27.0
+numpy>=1.26.0

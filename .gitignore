@@ -1,23 +1,45 @@
-# Dependencies
-node_modules/
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
 .venv/
 venv/
 env/
-__pycache__/
-*.pyc
 
 # Environment
 .env
+.env.local
+.env.*.local
 
-# Project Specific
+# Node
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Output
+outputs/
+tmp/
+temp/
 workspace/
 logs/
 static/exports/
-clipperApp_project.zip
+*.mp4
+*.mov
+*.mp3
+*.wav
 
-# IDEs
+# GCP credentials
+*-credentials.json
+service-account*.json
+
+# IDE
 .vscode/
 .idea/
+*.swp
 
 # OS
 .DS_Store
@@ -26,3 +48,4 @@ Thumbs.db
 # Local Data
 clipper.db
 cookies.txt
+clipperApp_project.zip

@@ -1,0 +1,88 @@
+version: '3.9'
+
+services:
+
+  # ── Frontend React ──────────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ── Backend FastAPI ─────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+    volumes:
+      # Hot reload untuk development
+      - ./backend:/app
+      - ./shared:/app/shared
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── Worker GPU ──────────────────────────────────────────────────────
+  worker_gpu:
+    build:
+      context: ./worker_gpu
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - WHISPER_MODEL=tiny  # pakai tiny saat dev (lebih cepat)
+      - GPU_ENABLED=false   # false untuk local dev tanpa GPU
+    volumes:
+      - ./worker_gpu:/app
+      - ./shared:/app/shared
+      - whisper_cache:/app/.cache/whisper  # persist whisper model
+    restart: unless-stopped
+    # Uncomment baris ini jika punya GPU lokal:
+    # deploy:
+    #   resources:
+    #     resources:
+    #       reservations:
+    #         devices:
+    #           - driver: nvidia
+    #             count: 1
+    #             capabilities: [gpu]
+
+  # ── Worker Node ─────────────────────────────────────────────────────
+  worker_node:
+    build:
+      context: ./worker_node
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+    volumes:
+      - ./worker_node:/app
+      - ./shared:/app/shared
+    restart: unless-stopped
+    # Chromium butuh shm yang cukup besar
+    shm_size: '2gb'
+
+# ── Volumes ────────────────────────────────────────────────────────────
+volumes:
+  whisper_cache:
+    driver: local

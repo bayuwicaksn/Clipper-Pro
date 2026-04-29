@@ -1,0 +1,334 @@
+name: Build & Deploy Clipper-Pro
+
+on:
+  push:
+    branches:
+      - main
+  # Manual trigger
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service to deploy (all/frontend/backend/worker_gpu/worker_node)'
+        required: false
+        default: 'all'
+
+# Env variables global
+env:
+  GCP_REGION: asia-southeast1
+  REGISTRY: asia-southeast1-docker.pkg.dev
+  REPO: clipper
+
+jobs:
+
+  # ── Job 1: Build & Push Frontend ─────────────────────────────────────
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    # Hanya build jika ada perubahan di frontend/ atau workflow berubah
+    if: |
+      github.event.inputs.service == 'all' ||
+      github.event.inputs.service == 'frontend' ||
+      github.event.inputs.service == ''
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Build & Push Frontend
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/frontend
+          
+          docker build \
+            --tag $IMAGE:latest \
+            --tag $IMAGE:${{ github.sha }} \
+            --cache-from $IMAGE:latest \
+            --file frontend/Dockerfile \
+            frontend/
+          
+          docker push $IMAGE:latest
+          docker push $IMAGE:${{ github.sha }}
+          
+          echo "IMAGE_FRONTEND=$IMAGE:${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Deploy Frontend to Cloud Run
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/frontend
+          
+          gcloud run deploy clipper-frontend \
+            --image $IMAGE:${{ github.sha }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 80 \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 5 \
+            --set-env-vars "ENVIRONMENT=production"
+
+  # ── Job 2: Build & Push Backend ──────────────────────────────────────
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    if: |
+      github.event.inputs.service == 'all' ||
+      github.event.inputs.service == 'backend' ||
+      github.event.inputs.service == ''
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Build & Push Backend
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend
+          
+          docker build \
+            --tag $IMAGE:latest \
+            --tag $IMAGE:${{ github.sha }} \
+            --cache-from $IMAGE:latest \
+            --file backend/Dockerfile \
+            --build-context shared=shared \
+            backend/
+          
+          docker push $IMAGE:latest
+          docker push $IMAGE:${{ github.sha }}
+
+      - name: Deploy Backend to Cloud Run
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend
+          
+          gcloud run deploy clipper-backend \
+            --image $IMAGE:${{ github.sha }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8000 \
+            --memory 1Gi \
+            --cpu 2 \
+            --min-instances 0 \
+            --max-instances 10 \
+            --set-env-vars "ENVIRONMENT=production" \
+            --set-secrets "SUPABASE_URL=SUPABASE_URL:latest" \
+            --set-secrets "SUPABASE_KEY=SUPABASE_KEY:latest" \
+            --set-secrets "GCP_PROJECT_ID=GCP_PROJECT_ID:latest" \
+            --set-secrets "PUBSUB_TOPIC_JOBS=PUBSUB_TOPIC_JOBS:latest"
+
+  # ── Job 3: Build & Push Worker GPU ───────────────────────────────────
+  build-worker-gpu:
+    name: Build Worker GPU
+    # Worker GPU image besar (~3GB) — butuh runner dengan disk lebih besar
+    runs-on: ubuntu-latest
+    if: |
+      github.event.inputs.service == 'all' ||
+      github.event.inputs.service == 'worker_gpu' ||
+      github.event.inputs.service == ''
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        # Worker GPU image besar, perlu bebaskan disk dulu
+        run: |
+          echo "Disk before cleanup:"
+          df -h
+          
+          # Hapus software yang tidak diperlukan
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          
+          echo "Disk after cleanup:"
+          df -h
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Worker GPU
+        uses: docker/build-push-action@v5
+        with:
+          context: worker_gpu
+          file: worker_gpu/Dockerfile
+          push: true
+          # Cache dari Artifact Registry (hemat waktu build ulang)
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-gpu:cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-gpu:cache,mode=max
+          build-contexts: |
+            shared=shared
+          tags: |
+            ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-gpu:latest
+            ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-gpu:${{ github.sha }}
+          build-args: |
+            WHISPER_MODEL=medium
+
+      - name: Deploy Worker GPU to Cloud Run
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-gpu
+          
+          gcloud run deploy clipper-worker-gpu \
+            --image $IMAGE:${{ github.sha }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --no-allow-unauthenticated \
+            --port 8080 \
+            --memory 16Gi \
+            --cpu 8 \
+            --gpu 1 \
+            --gpu-type nvidia-l4 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --timeout 3600 \
+            --concurrency 1 \
+            --set-env-vars "ENVIRONMENT=production,WHISPER_MODEL=medium,GPU_ENABLED=true" \
+            --set-secrets "GCP_PROJECT_ID=GCP_PROJECT_ID:latest" \
+            --set-secrets "PUBSUB_SUBSCRIPTION_JOBS=PUBSUB_SUBSCRIPTION_JOBS:latest" \
+            --set-secrets "GCS_BUCKET=GCS_BUCKET:latest" \
+            --set-secrets "GEMINI_API_KEY=GEMINI_API_KEY:latest" \
+            --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest"
+
+  # ── Job 4: Build & Push Worker Node ──────────────────────────────────
+  build-worker-node:
+    name: Build Worker Node
+    runs-on: ubuntu-latest
+    if: |
+      github.event.inputs.service == 'all' ||
+      github.event.inputs.service == 'worker_node' ||
+      github.event.inputs.service == ''
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo docker image prune --all --force
+          df -h
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Worker Node
+        uses: docker/build-push-action@v5
+        with:
+          context: worker_node
+          file: worker_node/Dockerfile
+          push: true
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node:cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node:cache,mode=max
+          build-contexts: |
+            shared=shared
+          tags: |
+            ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node:latest
+            ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node:${{ github.sha }}
+
+      - name: Deploy Worker Node to Cloud Run
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node
+          
+          gcloud run deploy clipper-worker-node \
+            --image $IMAGE:${{ github.sha }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --no-allow-unauthenticated \
+            --port 8080 \
+            --memory 4Gi \
+            --cpu 4 \
+            --min-instances 0 \
+            --max-instances 5 \
+            --timeout 1800 \
+            --concurrency 1 \
+            --set-env-vars "ENVIRONMENT=production" \
+            --set-secrets "GCP_PROJECT_ID=GCP_PROJECT_ID:latest" \
+            --set-secrets "PUBSUB_SUBSCRIPTION_CAPTION=PUBSUB_SUBSCRIPTION_CAPTION:latest" \
+            --set-secrets "GCS_BUCKET=GCS_BUCKET:latest"
+
+  # ── Job 5: Notify setelah semua selesai ──────────────────────────────
+  notify:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [build-frontend, build-backend, build-worker-gpu, build-worker-node]
+    if: always()
+
+    steps:
+      - name: Summary
+        run: |
+          echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ${{ needs.build-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend | ${{ needs.build-backend.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Worker GPU | ${{ needs.build-worker-gpu.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Worker Node | ${{ needs.build-worker-node.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Commit: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "Triggered by: ${{ github.actor }}" >> $GITHUB_STEP_SUMMARY

@@ -51,15 +51,15 @@ class Pipeline:
             # ─── GPU Detection ──────────────────────────────────────
             from core.gpu_utils import print_gpu_info, has_nvidia_gpu
             if has_nvidia_gpu():
-                self.progress('download', '🚀 GPU detected! Using hardware-accelerated encoding', 3)
-                self.logger.info("🚀 GPU detected! Using hardware-accelerated encoding")
+                self.progress('download', 'GPU detected! Using hardware-accelerated encoding', 3)
+                self.logger.info("GPU detected! Using hardware-accelerated encoding")
                 print_gpu_info()
             else:
-                self.progress('download', 'ℹ️ No GPU detected, using CPU encoding', 3)
-                self.logger.info("ℹ️ No GPU detected, using CPU encoding")
+                self.progress('download', 'No GPU detected, using CPU encoding', 3)
+                self.logger.info("No GPU detected, using CPU encoding")
 
             # ─── Step 1: Download ────────────────────────────────────
-            self.progress('download', '📡 Establishing connection with YouTube...', 5)
+            self.progress('download', 'Establishing connection with YouTube...', 5)
             from core.downloader import download_video
             dl = download_video(
                 self.config['url'],
@@ -70,15 +70,15 @@ class Pipeline:
             video_metadata = dl['metadata']
 
             # ─── Step 2: Analyze ─────────────────────────────────────
-            self.progress('analyze', '🧠 AI is preparing transcript...', 20)
+            self.progress('analyze', 'AI is preparing transcript...', 20)
             from core.analyzer import analyze_highlights
             from core.utils import get_source_transcript
 
             transcript_path = os.path.join(self.job_dir, 'source_transcript.json')
             if os.path.exists(transcript_path):
-                self.progress('analyze', '📂 Transcript cache ditemukan, melewati transkripsi...', 25)
+                self.progress('analyze', 'Transcript cache found, skipping transcription...', 25)
             else:
-                self.progress('analyze', '🎙️ Generating precise word-level timestamps with Whisper...', 25)
+                self.progress('analyze', 'Generating precise word-level timestamps with Whisper...', 25)
             
             _, words = get_source_transcript(self.job_dir, provider=self.config.get('transcription_provider', 'openai-whisper'))
             
@@ -103,7 +103,7 @@ class Pipeline:
             
             transcript = '\n'.join(transcript_lines)
 
-            self.progress('analyze', '🔍 Scanning transcript for viral segments...', 40)
+            self.progress('analyze', 'Scanning transcript for viral segments...', 40)
             highlights = analyze_highlights(
                 transcript,
                 self.config,
@@ -111,14 +111,14 @@ class Pipeline:
             )
 
             if not highlights:
-                self.progress('error', '❌ No highlights found in the video.', 0)
+                self.progress('error', 'No highlights found in the video.', 0)
                 return []
 
-            self.progress('analyze', f'✨ Success! Found {len(highlights)} potential viral clips.', 70)
+            self.progress('analyze', f'Success! Found {len(highlights)} potential viral clips.', 70)
 
             # ─── Deferred Rendering ──────────────────────────────────
             # Instead of physical clipping here, we just save metadata.
-            self.progress('analyze', '🗂️ Mapping segments and preparing metadata...', 85)
+            self.progress('analyze', 'Mapping segments and preparing metadata...', 85)
             
             for i, h in enumerate(highlights):
                 clip_data = {
@@ -139,10 +139,10 @@ class Pipeline:
                 clips_result.append(clip_data)
 
             # ─── Step 7: Save metadata ───────────────────────────────
-            self.progress('finalize', '💾 Finalizing project workspace...', 95)
+            self.progress('finalize', 'Finalizing project workspace...', 95)
             self._save_metadata(clips_result, video_metadata)
 
-            self.progress('done', f'✅ Pipeline complete! Click clips to start editing.', 100)
+            self.progress('done', 'Pipeline complete! Click clips to start editing.', 100)
 
         except Exception as e:
             self.logger.error(f"Pipeline failed: {str(e)}", exc_info=True)

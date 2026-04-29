@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+.env.*
+*.log
+node_modules/
+*.mp4
+*.mov
+tmp/
+temp/
+outputs/

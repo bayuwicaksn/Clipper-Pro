@@ -1,0 +1,91 @@
+name: Test Build Only (No Deploy)
+
+on:
+  pull_request:
+    branches:
+      - main
+  # Manual trigger untuk test build saja
+  workflow_dispatch:
+
+env:
+  GCP_REGION: asia-southeast1
+  REGISTRY: asia-southeast1-docker.pkg.dev
+  REPO: clipper
+
+jobs:
+
+  test-build-frontend:
+    name: Test Build Frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Frontend (no push)
+        run: |
+          docker build \
+            --file frontend/Dockerfile \
+            frontend/
+          echo "✅ Frontend build OK"
+
+  test-build-backend:
+    name: Test Build Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Backend (no push)
+        run: |
+          docker build \
+            --file backend/Dockerfile \
+            --build-context shared=shared \
+            backend/
+          echo "✅ Backend build OK"
+
+  test-build-worker-gpu:
+    name: Test Build Worker GPU
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo docker image prune --all --force
+          df -h
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Worker GPU (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: worker_gpu
+          file: worker_gpu/Dockerfile
+          push: false
+          build-contexts: |
+            shared=shared
+          build-args: |
+            WHISPER_MODEL=medium
+
+  test-build-worker-node:
+    name: Test Build Worker Node
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo docker image prune --all --force
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Worker Node (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: worker_node
+          file: worker_node/Dockerfile
+          push: false
+          build-contexts: |
+            shared=shared
