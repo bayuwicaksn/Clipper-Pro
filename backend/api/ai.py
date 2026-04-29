@@ -1,5 +1,5 @@
-"""
-ClipperApp — AI Router (FastAPI)
+﻿"""
+ClipperApp â€” AI Router (FastAPI)
 Handles: caption presets, scene detection, face tracking, clip regeneration.
 """
 
@@ -10,11 +10,11 @@ from fastapi import APIRouter, HTTPException, Request, Query
 from fastapi.responses import StreamingResponse
 from typing import Optional
 
-from api import (
+from . import (
     resolve_job_dir, get_clip_dir, is_new_layout, logger,
     timestamp_to_seconds
 )
-from api.schemas import RegenerateRequest
+from .schemas import RegenerateRequest
 
 router = APIRouter(prefix="/api", tags=["ai"])
 
@@ -114,7 +114,7 @@ async def regenerate_clip(job_id: str, data: RegenerateRequest):
     with open(json_path, 'r', encoding='utf-8') as f:
         old_metadata = json.load(f)
 
-    from core.analyzer import regenerate_clip_metadata, parse_srt, timestamp_to_seconds as a_ts
+    from ..core.analyzer import regenerate_clip_metadata, parse_srt, timestamp_to_seconds as a_ts
     
     subtitle_path = os.path.join(job_dir, 'subtitles.srt')
     if not os.path.exists(subtitle_path):
@@ -184,7 +184,7 @@ async def auto_track_frame(job_id: str, timestamp: float = Query(0), clip_index:
                     raise HTTPException(status_code=404, detail='Raw clip or source video not found')
             
     try:
-        from core.reframer import get_face_center_x
+        from ..core.reframer import get_face_center_x
         meta_path = os.path.join(clip_dir, 'meta.json')
         clip_origin = 0
         if os.path.exists(meta_path):

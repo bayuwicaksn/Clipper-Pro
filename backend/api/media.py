@@ -1,5 +1,5 @@
-"""
-ClipperApp — Media Router (FastAPI)
+﻿"""
+ClipperApp â€” Media Router (FastAPI)
 Handles: video streaming, downloads, thumbnails, export files, cookies.
 """
 
@@ -9,7 +9,7 @@ import subprocess
 from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from fastapi.responses import FileResponse
 
-from api import resolve_job_dir, get_clip_dir, is_new_layout, logger
+from . import resolve_job_dir, get_clip_dir, is_new_layout, logger
 
 router = APIRouter(prefix="/api", tags=["media"])
 
@@ -58,7 +58,7 @@ async def get_caption_composition(job_id: str, request: Request):
     Returns the generated HTML composition.
     """
     from fastapi.responses import HTMLResponse
-    from core.caption_composition import generate_caption_composition
+    from ..core.caption_composition import generate_caption_composition
     import tempfile
 
     job_dir = resolve_job_dir(job_id)

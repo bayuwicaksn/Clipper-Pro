@@ -1,5 +1,5 @@
-"""
-GPU Utilities — Detect NVIDIA GPU and provide FFmpeg/OpenCV GPU-accelerated options
+﻿"""
+GPU Utilities â€” Detect NVIDIA GPU and provide FFmpeg/OpenCV GPU-accelerated options
 """
 
 import subprocess
@@ -22,7 +22,7 @@ def has_nvidia_gpu():
         )
         if result.returncode == 0 and result.stdout.strip():
             gpu_name = result.stdout.strip().split('\n')[0]
-            print(f'[GPU] ✅ NVIDIA GPU detected: {gpu_name}')
+            print(f'[GPU] âœ… NVIDIA GPU detected: {gpu_name}')
             _gpu_available = True
         else:
             _gpu_available = False
@@ -30,7 +30,7 @@ def has_nvidia_gpu():
         _gpu_available = False
 
     if not _gpu_available:
-        print('[GPU] ❌ No NVIDIA GPU detected, using CPU encoding')
+        print('[GPU] âŒ No NVIDIA GPU detected, using CPU encoding')
 
     return _gpu_available
 
@@ -61,7 +61,7 @@ def get_ffmpeg_encoders():
 
 def get_ffmpeg_video_encode_args():
     """
-    Get FFmpeg video encoding args — GPU-accelerated if available.
+    Get FFmpeg video encoding args â€” GPU-accelerated if available.
     Returns list of args for the best available encoder.
     """
     encoders = get_ffmpeg_encoders()

@@ -1,5 +1,5 @@
-"""
-Caption Composition Generator — HyperFrames HTML + GSAP
+﻿"""
+Caption Composition Generator â€” HyperFrames HTML + GSAP
 Generates a single HTML composition file that renders identically
 in both the browser preview (<hyperframes-player>) and export (npx hyperframes render).
 
@@ -13,7 +13,7 @@ import logging
 
 logger = logging.getLogger('pipeline')
 
-# ── Auto-Highlight Keyword Patterns ──────────────────────────────────────────
+# â”€â”€ Auto-Highlight Keyword Patterns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Synced between frontend and backend
 GREEN_REGEX = r"^(sukses|kaya|uang|viral|trending|presiden|milyar|triliun|cuan)"
 YELLOW_REGEX = r"^(penting|rahasia|masalah|solusi|gila|keren|tips|trik|cara|fakta|bukti)"
@@ -51,7 +51,7 @@ def generate_caption_composition(
     standard_input = os.path.join(work_dir, "index.html")
 
 
-    # ── Extract settings with defaults ────────────────────────────────────
+    # â”€â”€ Extract settings with defaults â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     font_name       = settings.get('fontName') or 'Montserrat'
     font_size       = settings.get('fontSize')
     if font_size is None: font_size = 100
@@ -91,12 +91,12 @@ def generate_caption_composition(
     
     style_type      = (settings.get('styleType') or 'classic').lower()
 
-    # ── Font weight mapping ───────────────────────────────────────────────
+    # â”€â”€ Font weight mapping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     css_font_weight = 900 if font_weight in ['Black', 'Heavy'] else (
         700 if font_weight == 'Bold' else (500 if font_weight == 'Medium' else 400)
     )
 
-    # ── Responsive Scaling (vh) ───────────────────────────────────────────
+    # â”€â”€ Responsive Scaling (vh) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # We use vh (viewport height) so the text scales proportionally whether
     # rendered in a 300x533 preview iframe or a 1080x1920 headless browser.
     # The reference height is the dynamic video height (e.g. 1920).
@@ -116,12 +116,12 @@ def generate_caption_composition(
 
     shadow_css = f"{shadow_x_vh}vh {shadow_y_vh}vh {shadow_blur_vh}vh {shadow_color}" if shadow_enabled else "none"
 
-    # ── Compute total duration from words ─────────────────────────────────
+    # â”€â”€ Compute total duration from words â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     total_duration = max(w['end'] for w in words) if words else 1
     # Add small buffer
     total_duration = round(total_duration + 0.5, 2)
 
-    # ── Intelligent Word Chunking (CapCut Style) ──────────────────────────
+    # â”€â”€ Intelligent Word Chunking (CapCut Style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # CapCut splits by:
     # 1. Speech pauses (> 0.4s between words)
     # 2. Punctuation (sentence ends)
@@ -194,7 +194,7 @@ def generate_caption_composition(
     if current_chunk:
         chunks.append(current_chunk)
 
-    # ── Determine animation parameters ────────────────────────────────────
+    # â”€â”€ Determine animation parameters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     is_intense = style_type in ['explosive', 'hype', 'vibrant']
     is_bouncy = style_type in ['explosive', 'hype', 'vibrant', 'model', 'fast']
 
@@ -203,7 +203,7 @@ def generate_caption_composition(
     anim_duration = 0.15  # seconds
     future_opacity = 0.6 if is_intense else 0.8
 
-    # ── Build HTML elements for each page/chunk ───────────────────────────
+    # â”€â”€ Build HTML elements for each page/chunk â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     page_elements = []
     gsap_animations = []
     word_counter = 0
@@ -276,7 +276,7 @@ def generate_caption_composition(
 {words_html}
   </div>""")
 
-    # ── Future word opacity — set initial opacity for non-first words in each chunk
+    # â”€â”€ Future word opacity â€” set initial opacity for non-first words in each chunk
     for chunk_idx, chunk in enumerate(chunks):
         word_offset = sum(len(chunks[i]) for i in range(chunk_idx))
         for w_idx, w in enumerate(chunk):
@@ -290,7 +290,7 @@ def generate_caption_composition(
                     f'  tl.to("#{wid}", {{ opacity: 1, duration: 0.1 }}, {w["start"]});'
                 )
 
-    # ── Escape video path for HTML ────────────────────────────────────────
+    # â”€â”€ Escape video path for HTML â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # Use relative path if possible, or just the filename
     video_filename = os.path.basename(video_src) if video_src else "reframed.mp4"
 
@@ -298,7 +298,7 @@ def generate_caption_composition(
     # HyperFrames/Remotion will detect the transparent body and render alpha channel
     bg_color = 'transparent'
 
-    # Video element — we now remove this for the hybrid approach in export mode
+    # Video element â€” we now remove this for the hybrid approach in export mode
     # so the engine only renders the captions as a transparent layer.
     video_html = ''
     
@@ -313,7 +313,7 @@ def generate_caption_composition(
     preview_controller = ''
     if preview_mode:
         preview_controller = """
-    // Preview controller — driven by parent via postMessage
+    // Preview controller â€” driven by parent via postMessage
     const pages = document.querySelectorAll('.caption-page');
     const pageData = Array.from(pages).map(p => ({
       el: p,
@@ -345,7 +345,7 @@ def generate_caption_composition(
     window.parent.postMessage({ type: 'caption-ready', duration: tl.duration() }, '*');
 """
 
-    # ── Compose full HTML ─────────────────────────────────────────────────
+    # â”€â”€ Compose full HTML â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     pages_html = "\n\n".join(page_elements)
     gsap_js = "\n".join(gsap_animations)
 

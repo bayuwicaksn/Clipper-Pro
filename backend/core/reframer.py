@@ -1,5 +1,5 @@
-"""
-Reframer — Convert 16:9 landscape to 9:16 portrait with face/speaker tracking
+﻿"""
+Reframer â€” Convert 16:9 landscape to 9:16 portrait with face/speaker tracking
 GPU-accelerated encoding when NVIDIA GPU is available.
 """
 
@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 import math
 import mediapipe as mp
-from core.gpu_utils import get_ffmpeg_video_encode_args, has_nvidia_gpu
+from .gpu_utils import get_ffmpeg_video_encode_args, has_nvidia_gpu
 
 # Set up MediaPipe FaceMesh globally
 mp_face_mesh = mp.solutions.face_mesh
@@ -313,7 +313,7 @@ def _track_with_mediapipe(clip_path, target_ratio):
                 face_landmarks = results.multi_face_landmarks[0]
                 best_overall_cx = _find_face_center(face_landmarks.landmark, width)
                 found_any_face = True
-                print(f"[Reframer] 🎯 Found subject! Locking camera at CX: {best_overall_cx}")
+                print(f"[Reframer] ðŸŽ¯ Found subject! Locking camera at CX: {best_overall_cx}")
                 break # Ketemu satu posisi, langsung kunci dan keluar scan
             f_idx += 1
             

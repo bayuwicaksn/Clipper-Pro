@@ -1,5 +1,5 @@
-"""
-Hook Generator — TTS voiceover + text overlay intro scene
+﻿"""
+Hook Generator â€” TTS voiceover + text overlay intro scene
 GPU-accelerated encoding when NVIDIA GPU is available.
 """
 
@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 from openai import OpenAI
 from PIL import Image, ImageDraw, ImageFont
-from core.gpu_utils import get_ffmpeg_video_encode_args
+from .gpu_utils import get_ffmpeg_video_encode_args
 
 
 def generate_hook(clip_path, hook_text, output_path, config=None, progress_callback=None, clip_index=0, total_clips=1):

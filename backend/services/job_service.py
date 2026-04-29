@@ -1,9 +1,9 @@
-import os
+﻿import os
 import json
 from sqlmodel import Session
-from db import crud
+from ..db import crud
 from db.database import engine
-from core.pipeline import Pipeline
+from ..core.pipeline import Pipeline
 
 def start_job(job_id: str, job_dir: str, config: dict, progress_callback: callable):
     """Business logic for starting a full clipping job."""

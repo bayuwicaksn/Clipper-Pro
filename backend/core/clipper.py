@@ -1,11 +1,11 @@
-"""
-Clipper — FFmpeg-based video segment extraction (GPU-accelerated encoding)
+﻿"""
+Clipper â€” FFmpeg-based video segment extraction (GPU-accelerated encoding)
 Decoding stays on CPU for stability on low-VRAM GPUs (e.g. GTX 1050 Ti 4GB).
 """
 
 import os
 import subprocess
-from core.gpu_utils import get_ffmpeg_video_encode_args
+from .gpu_utils import get_ffmpeg_video_encode_args
 
 
 def clip_segments(video_path, highlights, output_dir, progress_callback=None):

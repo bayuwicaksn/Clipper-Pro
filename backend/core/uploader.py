@@ -1,5 +1,5 @@
-"""
-Uploader — Stubs for YouTube and TikTok upload
+﻿"""
+Uploader â€” Stubs for YouTube and TikTok upload
 """
 
 # TODO: Implement OAuth-based YouTube upload using google-api-python-client

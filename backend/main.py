@@ -1,34 +1,57 @@
-"""
-Backend Entry Point — FastAPI
-Clipper-Pro Backend API
-
-Sementara ini re-export dari app.py lama sampai Phase 3 selesai.
-"""
-
-import sys
 import os
+import asyncio
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse
+from contextlib import asynccontextmanager
 
-# Tambahkan root ke path agar bisa import dari app.py lama
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Import lokal
+from .db.database import create_db_and_tables
+from .api.projects import router as projects_router
+from .api.media import router as media_router
+from .api.pipeline import router as pipeline_router
+from .api.editor import router as editor_router
+from .api.ai import router as ai_router
 
-# Re-export app dari root app.py
-# Ini SEMENTARA — akan diganti di Phase 3 dengan implementasi proper
-try:
-    from app import app
-    print("[Backend] Loaded app from root app.py")
-except ImportError as e:
-    print(f"[Backend] Warning: Could not import from root app.py: {e}")
-    print("[Backend] Creating minimal app for testing...")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize Database
+    create_db_and_tables()
+    yield
 
-    from fastapi import FastAPI
-    from fastapi.responses import JSONResponse
+app = FastAPI(
+    title="Clipper-Pro API",
+    description="Microservice backend for AI-powered video clipping",
+    version="2.0.0",
+    lifespan=lifespan
+)
 
-    app = FastAPI(title="Clipper-Pro API", version="0.1.0")
+# CORS Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://clipper-frontend-715622381960.asia-southeast1.run.app",
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "*",  # Debug mode
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    @app.get("/health")
-    async def health():
-        return JSONResponse({"status": "ok", "phase": "2"})
+# Register Routers
+app.include_router(projects_router)
+app.include_router(media_router)
+app.include_router(pipeline_router)
+app.include_router(editor_router)
+app.include_router(ai_router)
 
-    @app.get("/")
-    async def root():
-        return JSONResponse({"message": "Clipper-Pro API Running"})
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "backend", "version": "2.0.0"}
+
+@app.get("/")
+async def root():
+    return {"message": "Clipper-Pro Backend API is running"}

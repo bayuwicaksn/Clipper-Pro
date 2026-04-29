@@ -1,5 +1,5 @@
-"""
-Downloader — YouTube video + subtitle download via yt-dlp
+﻿"""
+Downloader â€” YouTube video + subtitle download via yt-dlp
 """
 
 import os
@@ -26,7 +26,7 @@ def download_video(url, output_dir, progress_callback=None):
 
     video_path = os.path.join(output_dir, 'source.mp4')
 
-    # ─── Resume support: skip download if video already exists ───────
+    # â”€â”€â”€ Resume support: skip download if video already exists â”€â”€â”€â”€â”€â”€â”€
     if os.path.exists(video_path) and os.path.getsize(video_path) > 1_000_000:
         print(f'[Downloader] Video already exists ({os.path.getsize(video_path) / 1024 / 1024:.0f} MB), skipping download.')
         if progress_callback:
@@ -120,11 +120,11 @@ def download_video(url, output_dir, progress_callback=None):
         '--progress',
         '--force-overwrites',
         '--no-check-certificates',
-        '--limit-rate', '10M',           # 🐢 Stable speed (Avoids YouTube throttling)
-        '--buffer-size', '1M',           # 🔥 Boost throughput
+        '--limit-rate', '10M',           # ðŸ¢ Stable speed (Avoids YouTube throttling)
+        '--buffer-size', '1M',           # ðŸ”¥ Boost throughput
         '--http-chunk-size', '10M',      # Optimal chunking
         '--no-part',                     # Direct write (faster on Windows)
-        '--sleep-interval', '1',         # 🍃 Breathe between requests (human-like)
+        '--sleep-interval', '1',         # ðŸƒ Breathe between requests (human-like)
         '--retries', '5',
         '--socket-timeout', '30',
         '--verbose',

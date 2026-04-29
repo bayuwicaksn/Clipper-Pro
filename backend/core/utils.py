@@ -1,4 +1,4 @@
-import os
+﻿import os
 import json
 import logging
 from datetime import datetime
@@ -77,7 +77,7 @@ def get_source_transcript(job_dir, force=False, provider='openai-whisper'):
         try:
             if provider in ('openai-whisper', 'gpt-4o-transcribe', 'gpt-4o-mini-transcribe'):
                 import subprocess
-                from core.caption_generator import _transcribe_audio, _transcribe_audio_gpt4o
+                from .caption_generator import _transcribe_audio, _transcribe_audio_gpt4o
                 
                 # 1. Extract Full Audio
                 audio_path = os.path.join(job_dir, 'source_audio_temp.mp3')

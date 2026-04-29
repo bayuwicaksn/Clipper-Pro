@@ -1,12 +1,12 @@
-"""
-Pipeline — Orchestrates all processing modules in sequence
+﻿"""
+Pipeline â€” Orchestrates all processing modules in sequence
 """
 
 import os
 import json
 import traceback
 from datetime import datetime
-from core.analyzer import timestamp_to_seconds
+from .analyzer import timestamp_to_seconds
 
 
 class Pipeline:
@@ -24,7 +24,7 @@ class Pipeline:
     """
 
     def __init__(self, job_dir, config, progress_callback=None):
-        from core.utils import pipeline_logger as logger
+        from .utils import pipeline_logger as logger
         self.logger = logger
         self.job_dir = job_dir
         self.config = config
@@ -48,8 +48,8 @@ class Pipeline:
         clips_result = []
 
         try:
-            # ─── GPU Detection ──────────────────────────────────────
-            from core.gpu_utils import print_gpu_info, has_nvidia_gpu
+            # â”€â”€â”€ GPU Detection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            from .gpu_utils import print_gpu_info, has_nvidia_gpu
             if has_nvidia_gpu():
                 self.progress('download', 'GPU detected! Using hardware-accelerated encoding', 3)
                 self.logger.info("GPU detected! Using hardware-accelerated encoding")
@@ -58,9 +58,9 @@ class Pipeline:
                 self.progress('download', 'No GPU detected, using CPU encoding', 3)
                 self.logger.info("No GPU detected, using CPU encoding")
 
-            # ─── Step 1: Download ────────────────────────────────────
+            # â”€â”€â”€ Step 1: Download â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             self.progress('download', 'Establishing connection with YouTube...', 5)
-            from core.downloader import download_video
+            from .downloader import download_video
             dl = download_video(
                 self.config['url'],
                 self.job_dir,
@@ -69,10 +69,10 @@ class Pipeline:
             video_path = dl['video_path']
             video_metadata = dl['metadata']
 
-            # ─── Step 2: Analyze ─────────────────────────────────────
+            # â”€â”€â”€ Step 2: Analyze â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             self.progress('analyze', 'AI is preparing transcript...', 20)
-            from core.analyzer import analyze_highlights
-            from core.utils import get_source_transcript
+            from .analyzer import analyze_highlights
+            from .utils import get_source_transcript
 
             transcript_path = os.path.join(self.job_dir, 'source_transcript.json')
             if os.path.exists(transcript_path):
@@ -90,7 +90,7 @@ class Pipeline:
             for w in words:
                 ts = int(w['start'])
                 if ts != last_ts and current_line:
-                    from core.utils import seconds_to_timestamp_simple
+                    from .utils import seconds_to_timestamp_simple
                     ts_str = seconds_to_timestamp_simple(last_ts)
                     transcript_lines.append(f"[{ts_str}] {' '.join(current_line)}")
                     current_line = []
@@ -98,7 +98,7 @@ class Pipeline:
                 last_ts = ts
             
             if current_line:
-                from core.utils import seconds_to_timestamp_simple
+                from .utils import seconds_to_timestamp_simple
                 transcript_lines.append(f"[{seconds_to_timestamp_simple(last_ts)}] {' '.join(current_line)}")
             
             transcript = '\n'.join(transcript_lines)
@@ -116,7 +116,7 @@ class Pipeline:
 
             self.progress('analyze', f'Success! Found {len(highlights)} potential viral clips.', 70)
 
-            # ─── Deferred Rendering ──────────────────────────────────
+            # â”€â”€â”€ Deferred Rendering â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             # Instead of physical clipping here, we just save metadata.
             self.progress('analyze', 'Mapping segments and preparing metadata...', 85)
             
@@ -138,7 +138,7 @@ class Pipeline:
                 }
                 clips_result.append(clip_data)
 
-            # ─── Step 7: Save metadata ───────────────────────────────
+            # â”€â”€â”€ Step 7: Save metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             self.progress('finalize', 'Finalizing project workspace...', 95)
             self._save_metadata(clips_result, video_metadata)
 
@@ -179,7 +179,7 @@ class Pipeline:
             export_ts = int(_time.time())
             segments_dir = os.path.join(clip_dir, 'segments', f'run_{export_ts}')
 
-            from core.clipper import clip_segments
+            from .clipper import clip_segments
             raw_clips = clip_segments(
                 video_path, [clip_metadata], segments_dir,
                 progress_callback=None
@@ -220,7 +220,7 @@ class Pipeline:
             raise
 
     def _process_single_clip(self, raw_clip_path, highlight, index, total, aspect_ratio='9:16', work_dir=None):
-        """Process a single clip through reframe → captions → hook (all FFmpeg-native)."""
+        """Process a single clip through reframe â†’ captions â†’ hook (all FFmpeg-native)."""
         clip_dir = self._clip_dir(index)
         exports_dir = os.path.join(clip_dir, 'exports')
         os.makedirs(exports_dir, exist_ok=True)
@@ -233,11 +233,11 @@ class Pipeline:
 
         current_path = raw_clip_path
 
-        # ─── Step 1: Reframe (16:9 → 9:16 portrait crop) ─────────
+        # â”€â”€â”€ Step 1: Reframe (16:9 â†’ 9:16 portrait crop) â”€â”€â”€â”€â”€â”€â”€â”€â”€
         self.progress('reframe', f'Reframing clip to portrait...', 40)
         reframed_path = os.path.join(temp_dir, f'{clip_name}_reframed.mp4')
 
-        from core.reframer import reframe_clip
+        from .reframer import reframe_clip
 
         segments = highlight.get('segments')
         custom_crop_x = highlight.get('custom_crop_x')
@@ -257,12 +257,12 @@ class Pipeline:
         if os.path.exists(reframed_path) and os.path.getsize(reframed_path) > 0:
             current_path = reframed_path
 
-        # ─── Step 2: Hook intro (optional TTS + blurred intro) ───
+        # â”€â”€â”€ Step 2: Hook intro (optional TTS + blurred intro) â”€â”€â”€
         if self.config.get('enable_hook', True) and highlight.get('hook_text'):
             self.progress('hook', f'Generating hook intro...', 55)
             hooked_path = os.path.join(temp_dir, f'{clip_name}_hooked.mp4')
             try:
-                from core.hook_generator import generate_hook
+                from .hook_generator import generate_hook
                 generate_hook(
                     current_path, highlight['hook_text'], hooked_path,
                     config=self.config, progress_callback=self.progress,
@@ -273,7 +273,7 @@ class Pipeline:
             except Exception as e:
                 self.logger.warning(f"Hook generation failed (non-fatal): {e}")
 
-        # ─── Step 3: Captions (HyperFrames composition + GSAP) ────
+        # â”€â”€â”€ Step 3: Captions (HyperFrames composition + GSAP) â”€â”€â”€â”€
         if self.config.get('enable_captions', True):
             self.progress('caption', f'Generating caption composition...', 70)
             captioned_path = os.path.join(temp_dir, f'{clip_name}_final.mp4')
@@ -300,7 +300,7 @@ class Pipeline:
             # Try HyperFrames composition-based rendering first
             if custom_words and caption_settings.get('presetId') != 'none':
                 try:
-                    from core.caption_composition import generate_caption_composition, render_composition
+                    from .caption_composition import generate_caption_composition, render_composition
 
                     # Parse video dimensions from aspect ratio
                     ar = self.config.get('aspect_ratio', '9:16')
@@ -330,7 +330,7 @@ class Pipeline:
                     if os.path.exists(overlay_mov_path) and os.path.getsize(overlay_mov_path) > 0:
                         # Step 4: Composite the transparent captions over the reframed video
                         self.progress('caption', f'Compositing hybrid final video...', 85)
-                        from core.caption_composition import composite_transparent_captions
+                        from .caption_composition import composite_transparent_captions
                         composite_transparent_captions(current_path, overlay_mov_path, captioned_path)
                         
                         if os.path.exists(captioned_path) and os.path.getsize(captioned_path) > 0:
@@ -350,7 +350,7 @@ class Pipeline:
             # Fallback: old ASS-based caption burning
             if not caption_success:
                 self.progress('caption', f'Burning captions (fallback)...', 80)
-                from core.caption_generator import generate_captions
+                from .caption_generator import generate_captions
                 generate_captions(
                     current_path, captioned_path,
                     config=self.config,
@@ -362,7 +362,7 @@ class Pipeline:
             if os.path.exists(captioned_path) and os.path.getsize(captioned_path) > 0:
                 current_path = captioned_path
         else:
-            # No captions — just copy to final location
+            # No captions â€” just copy to final location
             import shutil
             captioned_path = os.path.join(temp_dir, f'{clip_name}_final.mp4')
             shutil.copy(current_path, captioned_path)

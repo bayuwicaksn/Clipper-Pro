@@ -1,5 +1,5 @@
-"""
-ClipperApp — Editor Router (FastAPI)
+﻿"""
+ClipperApp â€” Editor Router (FastAPI)
 Handles: editor state save/load, transcript API.
 """
 
@@ -9,7 +9,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, Query
 from typing import Optional
 
-from api import (
+from . import (
     resolve_job_dir, get_clip_dir, is_new_layout, logger,
     timestamp_to_seconds, filter_words_by_range, get_source_transcript
 )
@@ -17,7 +17,7 @@ from api import (
 router = APIRouter(prefix="/api", tags=["editor"])
 
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _get_clip_bounds(job_dir, clip_index):
     """Get clip start/end from meta.json, falling back to session.json."""
     clip_dir = get_clip_dir(job_dir, clip_index)
@@ -46,7 +46,7 @@ def _get_clip_bounds(job_dir, clip_index):
     return 0, 0
 
 
-# ─── Routes ──────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @router.post('/save_editor/{job_id}')
 async def save_editor_state(job_id: str, request: Request, clip_index: int = Query(0)):
     """Save the current editor state (segments, active clip, etc.) to disk."""

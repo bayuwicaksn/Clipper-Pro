@@ -1,5 +1,5 @@
-from sqlmodel import Session, select
-from db.models import Job
+﻿from sqlmodel import Session, select
+from .models import Job
 import json
 from datetime import datetime
 from typing import Optional, List

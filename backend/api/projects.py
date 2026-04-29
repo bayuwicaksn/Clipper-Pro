@@ -1,5 +1,5 @@
-"""
-ClipperApp — Projects Router (FastAPI)
+﻿"""
+ClipperApp â€” Projects Router (FastAPI)
 Handles: project listing, deletion, clip metadata retrieval.
 """
 
@@ -10,13 +10,13 @@ from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Depends
 from sqlmodel import Session
 
-from api import (
+from . import (
     WORKSPACE, resolve_job_dir, get_clip_dir,
     is_new_layout, robust_rmtree, logger
 )
-from db import crud
-from db.database import get_session
-from api.schemas import ProjectResponse
+from ..db import crud
+from ..db.database import get_session
+from .schemas import ProjectResponse
 
 router = APIRouter(prefix="/api", tags=["projects"])
 

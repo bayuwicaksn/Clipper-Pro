@@ -1,5 +1,5 @@
-"""
-ClipperApp — Pipeline Router (FastAPI)
+﻿"""
+ClipperApp â€” Pipeline Router (FastAPI)
 Handles: processing jobs, export, progress streaming (SSE), status.
 """
 
@@ -17,29 +17,29 @@ from typing import Optional
 import queue as queue_module
 from sqlmodel import Session
 
-from api import (
+from . import (
     WORKSPACE, progress_queues, progress_states,
     resolve_job_dir, get_clip_dir, is_new_layout,
     create_progress_callback, slugify, logger,
     timestamp_to_seconds, filter_words_by_range
 )
-from db import crud
+from ..db import crud
 from db.database import get_session, engine
-from api.schemas import ProcessRequest, ExportRequest, ReprocessRequest, JobResponse
-from services import job_service
+from .schemas import ProcessRequest, ExportRequest, ReprocessRequest, JobResponse
+from ..services import job_service
 
 router = APIRouter(prefix="/api", tags=["pipeline"])
 
 
 
 
-# ─── Internal Pipeline Runner ────────────────────────────────────────────────
+# â”€â”€â”€ Internal Pipeline Runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _run_pipeline(job_id, job_dir, config, progress_callback):
     """Execute the full clipping pipeline via job_service."""
     job_service.start_job(job_id, job_dir, config, progress_callback)
 
 
-# ─── Routes ──────────────────────────────────────────────────────────────────
+# â”€â”€â”€ Routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @router.post('/process')
 async def start_processing(data: ProcessRequest, session: Session = Depends(get_session)):
     """Start the full clipping pipeline."""
@@ -155,7 +155,7 @@ async def stream_progress(job_id: str):
                 if event.get('step') in ('done', 'error'):
                     break
             except queue_module.Empty:
-                # Non-blocking check — yield heartbeat every ~10 seconds
+                # Non-blocking check â€” yield heartbeat every ~10 seconds
                 await asyncio.sleep(1)
                 yield 'data: ' + json.dumps({'step': 'heartbeat', 'message': 'Processing...', 'progress': -1}) + '\n\n'
 

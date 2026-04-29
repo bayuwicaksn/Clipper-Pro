@@ -1,5 +1,5 @@
-"""
-Caption Generator — Custom ASS-based animated captions (CapCut-style)
+﻿"""
+Caption Generator â€” Custom ASS-based animated captions (CapCut-style)
 Replaces pycaps with a robust, library-free FFmpeg pipeline.
 """
 
@@ -40,7 +40,7 @@ def generate_captions(
             base = 60 + int((clip_index / max(total_clips, 1)) * 15)
             progress_callback('caption', msg, base + offset)
 
-    # ── 1. Get words ──────────────────────────────────────────────
+    # â”€â”€ 1. Get words â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if custom_words:
         words = custom_words
         logger.info(f"[Caption] Using {len(words)} pre-mapped words from pipeline.")
@@ -67,7 +67,7 @@ def generate_captions(
         shutil.copy(clip_path, output_path)
         return
 
-    # ── 2. Generate ASS Subtitle File ─────────────────────────────
+    # â”€â”€ 2. Generate ASS Subtitle File â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     _progress('Generating custom ASS subtitle file...', 5)
     ass_path = output_path.replace('.mp4', '.ass')
     
@@ -76,7 +76,7 @@ def generate_captions(
         width, height = _get_video_dimensions(clip_path)
         _generate_ass_file(words, caption_settings, ass_path, width, height)
         
-        # ── 3. Burn captions with FFmpeg ──────────────────────────
+        # â”€â”€ 3. Burn captions with FFmpeg â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         _progress('Burning captions into video (FFmpeg)...', 10)
         _burn_with_ffmpeg(clip_path, ass_path, output_path)
         
@@ -99,7 +99,7 @@ def generate_captions(
     _progress(f'Captions done for clip {clip_index + 1}', 15)
 
 
-# ── ASS Generation Logic ──────────────────────────────────────────
+# â”€â”€ ASS Generation Logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _generate_ass_file(words, settings, ass_path, video_w, video_h):
     """
@@ -387,7 +387,7 @@ def _burn_with_ffmpeg(input_path, ass_path, output_path):
                 raise Exception(f"FFmpeg caption burn failed: {error_msg}")
 
 
-# ── Audio helpers (unchanged but cleaned) ─────────────────────────
+# â”€â”€ Audio helpers (unchanged but cleaned) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def _extract_audio(video_path, audio_path):
     cmd = ['ffmpeg', '-y', '-i', video_path, '-vn', '-acodec', 'pcm_s16le', '-ar', '16000', '-ac', '1', audio_path]
