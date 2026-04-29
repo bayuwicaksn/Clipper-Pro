@@ -24,14 +24,16 @@ FROM nginx:1.25-alpine
 # Ganti 'dist' dengan 'build' jika pakai Create React App
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy nginx config
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Copy nginx config as a template
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 
-# Expose port
-EXPOSE 80
+# Cloud Run set PORT env var — nginx alpine image has envsubst built-in
+ENV PORT=8080
+EXPOSE 8080
 
-# Health check
+# Health check (listen to $PORT)
 HEALTHCHECK --interval=30s --timeout=3s \
-  CMD wget --quiet --tries=1 --spider http://localhost:80/ || exit 1
+  CMD wget --quiet --tries=1 --spider http://localhost:$PORT/ || exit 1
 
-CMD ["nginx", "-g", "daemon off;"]
+# Replace $PORT in template and start nginx
+CMD ["/bin/sh", "-c", "envsubst '$PORT' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
