@@ -3,13 +3,19 @@ import json
 from sqlmodel import Session
 from backend.db.database import engine
 from shared.db import crud
-from shared.core.pipeline import Pipeline
+
+
+def _load_pipeline():
+    from shared.core.pipeline import Pipeline
+
+    return Pipeline
 
 def start_job(job_id: str, job_dir: str, config: dict, progress_callback: callable):
     """Business logic for starting a full clipping job."""
     with Session(engine) as session:
         crud.update_job_status(session, job_id, 'processing')
         try:
+            Pipeline = _load_pipeline()
             pipeline = Pipeline(job_dir, config, progress_callback)
             clips = pipeline.run()
             crud.update_job_status(session, job_id, 'completed')
@@ -33,6 +39,7 @@ def start_export(
     with Session(engine) as session:
         crud.update_job_status(session, export_id, 'processing')
         try:
+            Pipeline = _load_pipeline()
             pipeline = Pipeline(job_dir, config, progress_callback)
             
             final_data = pipeline.export_single_clip(
