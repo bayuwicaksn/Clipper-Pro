@@ -60,8 +60,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://clipper-frontend-715622381960.asia-southeast1.run.app",
-        "http://localhost:5173",  # Vite default port
+        "http://localhost:5173",
         "http://localhost:3000",
+        "*",  # Sementara untuk debugging
     ],
     allow_credentials=True,
     allow_methods=["*"],
