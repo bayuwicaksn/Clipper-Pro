@@ -66,7 +66,7 @@ USER workeruser
 
 # Health check — cek apakah worker process berjalan
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s \
-  CMD python3 -c "import sys; sys.exit(0)" || exit 1
+  CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Entry point
 CMD ["python3", "worker.py"]

@@ -1,6 +1,6 @@
-# PyTorch (Installed via Dockerfile for optimization)
-# torch>=2.2.0
-# torchvision>=0.17.0
+# PyTorch CPU wheels are installed in Dockerfile before this file for cache control.
+# torch
+# torchvision
 
 # AI & ML
 mediapipe>=0.10.11

@@ -139,31 +139,32 @@ def pull_messages():
         logger.warning("GCP_PROJECT_ID not set — idle mode")
         while True:
             time.sleep(60)
-        return
 
-    try:
-        from google.cloud import pubsub_v1
-        subscriber = pubsub_v1.SubscriberClient()
-        subscription_path = subscriber.subscription_path(project_id, subscription_id)
-        logger.info(f"Listening on {subscription_path}")
+    from google.cloud import pubsub_v1
+    retry_delay = 10
 
-        def callback(message):
-            try:
-                data = json.loads(message.data.decode("utf-8"))
-                process_caption_job(data)
-                message.ack()
-            except Exception as e:
-                logger.error(f"Error processing caption job: {e}", exc_info=True)
-                message.nack()
+    while True:
+        try:
+            subscriber = pubsub_v1.SubscriberClient()
+            subscription_path = subscriber.subscription_path(project_id, subscription_id)
+            logger.info(f"Listening on {subscription_path}")
 
-        streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
-        with subscriber:
-            streaming_pull_future.result()
+            def callback(message):
+                try:
+                    data = json.loads(message.data.decode("utf-8"))
+                    process_caption_job(data)
+                    message.ack()
+                except Exception as e:
+                    logger.error(f"Error processing caption job: {e}", exc_info=True)
+                    message.nack()
 
-    except Exception as e:
-        logger.error(f"Pub/Sub Listener Error: {e}", exc_info=True)
-        time.sleep(10)
-        pull_messages()
+            streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
+            with subscriber:
+                streaming_pull_future.result()
+        except Exception as e:
+            logger.error(f"Pub/Sub Listener Error: {e}", exc_info=True)
+            time.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 300)
 
 
 def handle_shutdown(signum, frame):

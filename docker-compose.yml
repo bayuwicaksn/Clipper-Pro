@@ -7,10 +7,12 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE: http://localhost:8000
     ports:
-      - "3000:80"
+      - "3000:8080"
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_BASE=http://localhost:8000
     depends_on:
       - backend
     restart: unless-stopped
@@ -20,6 +22,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      additional_contexts:
+        shared: ./shared
     ports:
       - "8000:8000"
     env_file:
@@ -29,7 +33,7 @@ services:
       - LOG_LEVEL=DEBUG
     volumes:
       # Hot reload untuk development
-      - ./backend:/app
+      - ./backend:/app/backend
       - ./shared:/app/shared
     restart: unless-stopped
     healthcheck:
@@ -43,6 +47,8 @@ services:
     build:
       context: ./worker_gpu
       dockerfile: Dockerfile
+      additional_contexts:
+        shared: ./shared
     env_file:
       - .env
     environment:
@@ -70,6 +76,8 @@ services:
     build:
       context: ./worker_node
       dockerfile: Dockerfile
+      additional_contexts:
+        shared: ./shared
     env_file:
       - .env
     environment:

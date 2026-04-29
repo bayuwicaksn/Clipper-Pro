@@ -1,0 +1,12 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: clipper-worker-gpu
+spec:
+  template:
+    spec:
+      containerConcurrency: 1
+      containers:
+        - image: WORKER_GPU_IMAGE
+          ports:
+            - containerPort: 8080

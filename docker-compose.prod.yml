@@ -1,0 +1,34 @@
+services:
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    ports:
+      - "8080:8080"
+    environment:
+      - ENVIRONMENT=production
+
+  backend:
+    image: ${BACKEND_IMAGE}
+    ports:
+      - "8000:8000"
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=${DATABASE_URL}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - PUBSUB_TOPIC_JOBS=${PUBSUB_TOPIC_JOBS:-clipper-jobs}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+
+  worker_gpu:
+    image: ${WORKER_GPU_IMAGE}
+    environment:
+      - ENVIRONMENT=production
+      - DATABASE_URL=${DATABASE_URL}
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - PUBSUB_SUBSCRIPTION_JOBS=${PUBSUB_SUBSCRIPTION_JOBS:-clipper-jobs-sub}
+      - PUBSUB_TOPIC_CAPTION=${PUBSUB_TOPIC_CAPTION:-clipper-caption-jobs}
+
+  worker_node:
+    image: ${WORKER_NODE_IMAGE}
+    environment:
+      - ENVIRONMENT=production
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - PUBSUB_SUBSCRIPTION_CAPTION=${PUBSUB_SUBSCRIPTION_CAPTION:-clipper-caption-jobs-sub}

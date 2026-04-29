@@ -142,7 +142,7 @@ def push_to_caption_queue(job_id, job_dir, clips, config):
             "timestamp": time.time()
         }).encode("utf-8")
         
-        publisher.publish(topic_path, message_data)
+        publisher.publish(topic_path, message_data).result(timeout=30)
         logger.info(f"[{job_id}] Pushed {len(clips)} clips to captioning topic: {topic_id}")
     except Exception as e:
         logger.error(f"[{job_id}] Failed to push to caption queue: {e}")
@@ -157,38 +157,35 @@ def pull_messages():
         logger.warning("GCP_PROJECT_ID not set — running in demo mode")
         while True:
             time.sleep(30)
-        return
 
-    try:
-        from google.cloud import pubsub_v1
-        subscriber = pubsub_v1.SubscriberClient()
-        subscription_path = subscriber.subscription_path(project_id, subscription_id)
+    from google.cloud import pubsub_v1
+    retry_delay = 10
 
-        logger.info(f"Listening on {subscription_path}")
+    while True:
+        try:
+            subscriber = pubsub_v1.SubscriberClient()
+            subscription_path = subscriber.subscription_path(project_id, subscription_id)
 
-        def callback(message):
-            try:
-                data = json.loads(message.data.decode("utf-8"))
-                logger.info(f"Received job: {data.get('job_id')}")
-                process_job(data)
-                message.ack()
-            except Exception as e:
-                logger.error(f"Error processing message: {e}", exc_info=True)
-                message.nack()
+            logger.info(f"Listening on {subscription_path}")
 
-        streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
+            def callback(message):
+                try:
+                    data = json.loads(message.data.decode("utf-8"))
+                    logger.info(f"Received job: {data.get('job_id')}")
+                    process_job(data)
+                    message.ack()
+                except Exception as e:
+                    logger.error(f"Error processing message: {e}", exc_info=True)
+                    message.nack()
 
-        with subscriber:
-            try:
+            streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
+
+            with subscriber:
                 streaming_pull_future.result()
-            except Exception as e:
-                streaming_pull_future.cancel()
-                raise
-
-    except Exception as e:
-        logger.error(f"Pub/Sub Listener Error: {e}", exc_info=True)
-        time.sleep(10)
-        pull_messages()
+        except Exception as e:
+            logger.error(f"Pub/Sub Listener Error: {e}", exc_info=True)
+            time.sleep(retry_delay)
+            retry_delay = min(retry_delay * 2, 300)
 
 
 def handle_shutdown(signum, frame):

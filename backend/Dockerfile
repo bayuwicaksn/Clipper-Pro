@@ -19,8 +19,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Jika tidak ada, skip (tidak required untuk backend minimal)
 COPY --from=shared . /app/shared/
 
-# Copy backend source
-COPY . .
+# Copy backend source as a package so relative imports work
+COPY . /app/backend/
 
 # Create non-root user (security best practice)
 RUN adduser --disabled-password --gecos "" appuser && \
@@ -35,4 +35,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s \
   CMD curl -f http://localhost:8000/health || exit 1
 
 # Run FastAPI
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

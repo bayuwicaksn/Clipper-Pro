@@ -48,6 +48,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxtst6 \
     # ffmpeg untuk compositing akhir
     ffmpeg \
+    # healthcheck
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -81,7 +83,7 @@ USER nodeuser
 
 # Health check
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s \
-  CMD python3 -c "import sys; sys.exit(0)" || exit 1
+  CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Entry point
-CMD ["python3", "worker.py"]
+CMD ["python3", "src/worker.py"]

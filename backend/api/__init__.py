@@ -20,7 +20,7 @@ from shared.utils.helpers import (
     robust_rmtree
 )
 
-from config import settings
+from backend.core.config import settings
 
 # â”€â”€â”€ Configuration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 WORKSPACE = settings.CLIPPER_WORKSPACE

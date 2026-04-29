@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     PORT: int = 5000
     HOST: str = "0.0.0.0"
+    CORS_ORIGINS: str = ""
 
     # API Keys & Secrets
     GEMINI_API_KEY: str = ""

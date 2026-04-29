@@ -24,7 +24,7 @@ from . import (
     timestamp_to_seconds, filter_words_by_range
 )
 from shared.db import crud
-from shared.db.database import get_session, engine
+from backend.db.database import get_session, engine
 from .schemas import ProcessRequest, ExportRequest, ReprocessRequest, JobResponse
 from ..services import job_service
 
@@ -68,7 +68,7 @@ async def start_processing(data: ProcessRequest, session: Session = Depends(get_
                 "timestamp": time.time()
             }).encode("utf-8")
             
-            publisher.publish(topic_path, message_data)
+            publisher.publish(topic_path, message_data).result(timeout=30)
             logger.info(f"[Pub/Sub] Published job {job_id} to {topic_id}")
         except Exception as e:
             logger.error(f"[Pub/Sub] Failed to publish: {e}")
@@ -82,6 +82,12 @@ async def start_processing(data: ProcessRequest, session: Session = Depends(get_
         logger.warning(f"[Dev] GCP_PROJECT_ID not set. Job {job_id} created but not queued.")
 
     return {'job_id': job_id, 'status': 'queued'}
+
+
+@router.post('/pipeline/start')
+async def start_pipeline(data: ProcessRequest, session: Session = Depends(get_session)):
+    """Target architecture alias for starting the pipeline."""
+    return await start_processing(data, session)
 
 
 @router.post('/reprocess/{job_id}')

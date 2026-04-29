@@ -1,12 +1,8 @@
-import os
-import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 
-# Import lokal
+from .core.config import settings
 from .db.database import create_db_and_tables
 from .api.projects import router as projects_router
 from .api.media import router as media_router
@@ -28,14 +24,21 @@ app = FastAPI(
 )
 
 # CORS Configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+allowed_origins = [
+    origin.strip()
+    for origin in getattr(settings, "CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if not allowed_origins:
+    allowed_origins = [
         "https://clipper-frontend-715622381960.asia-southeast1.run.app",
         "http://localhost:5173",
         "http://localhost:3000",
-        "*",  # Debug mode
-    ],
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

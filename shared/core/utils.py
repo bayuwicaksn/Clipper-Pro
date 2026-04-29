@@ -31,7 +31,7 @@ def setup_logging(name, log_file, level=logging.INFO):
 app_logger = setup_logging('app', 'app.log')
 pipeline_logger = setup_logging('pipeline', 'pipeline.log')
 
-from utils.helpers import (
+from shared.utils.helpers import (
     timestamp_to_seconds,
     seconds_to_timestamp,
     seconds_to_timestamp_simple,
