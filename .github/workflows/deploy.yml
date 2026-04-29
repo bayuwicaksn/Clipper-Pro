@@ -129,6 +129,13 @@ jobs:
           docker push $IMAGE:latest
           docker push $IMAGE:${{ github.sha }}
 
+      - name: Clear existing secrets on Cloud Run
+        run: |
+          gcloud run services update clipper-backend \
+            --region ${{ env.GCP_REGION }} \
+            --clear-secrets \
+            --clear-env-vars 2>/dev/null || true
+
       - name: Deploy Backend to Cloud Run
         run: |
           IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend
@@ -143,7 +150,6 @@ jobs:
             --cpu 2 \
             --min-instances 0 \
             --max-instances 10 \
-            --clear-secrets \
             --set-env-vars "ENVIRONMENT=production,SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }},GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_TOPIC_JOBS=${{ secrets.PUBSUB_TOPIC_JOBS }}"
 
   # ── Job 3: Build & Push Worker GPU ───────────────────────────────────
@@ -212,6 +218,13 @@ jobs:
           build-args: |
             WHISPER_MODEL=medium
 
+      - name: Clear existing secrets on Cloud Run
+        run: |
+          gcloud run services update clipper-worker-gpu \
+            --region ${{ env.GCP_REGION }} \
+            --clear-secrets \
+            --clear-env-vars 2>/dev/null || true
+
       - name: Deploy Worker GPU to Cloud Run
         run: |
           IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-gpu
@@ -230,7 +243,6 @@ jobs:
             --max-instances 3 \
             --timeout 3600 \
             --concurrency 1 \
-            --clear-secrets \
             --set-env-vars "ENVIRONMENT=production,WHISPER_MODEL=medium,GPU_ENABLED=true,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_JOBS=${{ secrets.PUBSUB_SUBSCRIPTION_JOBS }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}"
 
   # ── Job 4: Build & Push Worker Node ──────────────────────────────────
@@ -286,6 +298,13 @@ jobs:
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node:latest
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node:${{ github.sha }}
 
+      - name: Clear existing secrets on Cloud Run
+        run: |
+          gcloud run services update clipper-worker-node \
+            --region ${{ env.GCP_REGION }} \
+            --clear-secrets \
+            --clear-env-vars 2>/dev/null || true
+
       - name: Deploy Worker Node to Cloud Run
         run: |
           IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node
@@ -302,7 +321,6 @@ jobs:
             --max-instances 5 \
             --timeout 1800 \
             --concurrency 1 \
-            --clear-secrets \
             --set-env-vars "ENVIRONMENT=production,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_CAPTION=${{ secrets.PUBSUB_SUBSCRIPTION_CAPTION }},GCS_BUCKET=${{ secrets.GCS_BUCKET }}"
 
   # ── Job 5: Notify setelah semua selesai ──────────────────────────────
