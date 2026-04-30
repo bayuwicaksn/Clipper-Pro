@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 
 import * as api from "../api/client";
+import ConfirmModal from "./ConfirmModal";
 
 function getInitialProjectId() {
   const path = window.location.pathname;
@@ -61,6 +62,26 @@ export default function HomeLayout({
   const [activeJobId, setActiveJobId] = useState(initialActiveJobId || getInitialProjectId());
   const [generatedClips, setGeneratedClips] = useState([]);
   const [resultTab, setResultTab] = useState("all");
+
+  // Custom Confirmation Modal State
+  const [confirmConfig, setConfirmConfig] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
+  const showConfirm = (title, message, onConfirm) => {
+    setConfirmConfig({
+      isOpen: true,
+      title,
+      message,
+      onConfirm: () => {
+        onConfirm();
+        setConfirmConfig(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
 
   function fetchClips(jobId) {
     api.fetchClips(jobId)
@@ -143,7 +164,7 @@ export default function HomeLayout({
         startSSE(data.job_id);
       })
       .catch((err) => {
-        alert(err.message);
+        notify(err.message, "error");
         setProcessing(false);
       });
   }
@@ -302,8 +323,8 @@ export default function HomeLayout({
                           const file = e.target.files[0];
                           if (file) {
                             api.uploadCookies(file)
-                            .then(data => alert(data.message || 'Error uploading cookies'))
-                            .catch(err => alert('Failed to upload cookies'));
+                            .then(data => notify(data.message || 'Cookies updated', 'success'))
+                            .catch(err => notify('Failed to upload cookies', 'error'));
                           }
                         }}
                       />
@@ -517,16 +538,22 @@ export default function HomeLayout({
                                 variant="destructive"
                                 size="icon"
                                 onClick={() => {
-                                  if (!confirm(`Delete "${exp.version_label || exp.filename}"?`)) return;
-                                  api.deleteExport(activeJobId, exp.filename)
-                                    .then((data) => {
-                                      if (data.status === "deleted") {
-                                        fetchClips(activeJobId);
-                                      } else {
-                                        alert(data.error || "Failed to delete");
-                                      }
-                                    })
-                                    .catch(() => alert("Network error"));
+                                  showConfirm(
+                                    "Delete Export",
+                                    `Are you sure you want to delete "${exp.version_label || exp.filename}"? This cannot be undone.`,
+                                    () => {
+                                      api.deleteExport(activeJobId, exp.filename)
+                                        .then((data) => {
+                                          if (data.status === "deleted") {
+                                            fetchClips(activeJobId);
+                                            notify("Export deleted", "success");
+                                          } else {
+                                            notify(data.error || "Failed to delete", "error");
+                                          }
+                                        })
+                                        .catch(() => notify("Network error", "error"));
+                                    }
+                                  );
                                 }}
                               >
                                 <Trash2 />
@@ -602,14 +629,19 @@ export default function HomeLayout({
                     className="absolute right-2 top-2 opacity-0 transition-opacity group-hover:opacity-100"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (!confirm(`Delete "${proj.title || proj.id}"? This cannot be undone.`)) return;
-                      api.deleteProject(proj.id)
-                        .then((data) => {
-                          if (data.error) throw new Error(data.error);
-                          notify("Project deleted", "success");
-                          if (onRefreshProjects) onRefreshProjects();
-                        })
-                        .catch((err) => notify("Delete failed: " + err.message, "error"));
+                      showConfirm(
+                        "Delete Project",
+                        `Delete "${proj.title || proj.id}"? This cannot be undone and all clips will be removed.`,
+                        () => {
+                          api.deleteProject(proj.id)
+                            .then((data) => {
+                              if (data.error) throw new Error(data.error);
+                              notify("Project deleted", "success");
+                              if (onRefreshProjects) onRefreshProjects();
+                            })
+                            .catch((err) => notify("Delete failed: " + err.message, "error"));
+                        }
+                      );
                     }}
                   >
                     <Trash2 />
@@ -620,6 +652,14 @@ export default function HomeLayout({
           </section>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        onConfirm={confirmConfig.onConfirm}
+        onCancel={() => setConfirmConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </>
   );
 }

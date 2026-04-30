@@ -1,4 +1,4 @@
-﻿from sqlmodel import Session, select
+from sqlmodel import Session, select
 from .models import Job
 import json
 from datetime import datetime
@@ -26,6 +26,18 @@ def update_job_status(session: Session, job_id: str, status: str, error: Optiona
     if job:
         job.status = status
         job.error = error
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+    return job
+
+def update_job(session: Session, job_id: str, data: dict) -> Optional[Job]:
+    """Generic update function for Job fields."""
+    job = get_job(session, job_id)
+    if job:
+        for key, value in data.items():
+            if hasattr(job, key):
+                setattr(job, key, value)
         session.add(job)
         session.commit()
         session.refresh(job)

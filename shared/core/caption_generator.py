@@ -1,4 +1,4 @@
-﻿"""
+"""
 Caption Generator â€” Custom ASS-based animated captions (CapCut-style)
 Replaces pycaps with a robust, library-free FFmpeg pipeline.
 """
@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import math
+from shared.config import settings
 
 logger = logging.getLogger('pipeline')
 
@@ -395,7 +396,7 @@ def _extract_audio(video_path, audio_path):
 
 def _transcribe_audio(audio_path, offset=0):
     from openai import OpenAI
-    client = OpenAI()
+    client = OpenAI(api_key=settings.OPENAI_API_KEY)
     with open(audio_path, 'rb') as f:
         transcription = client.audio.transcriptions.create(
             model='whisper-1', file=f, response_format='verbose_json', timestamp_granularities=['word']
@@ -417,7 +418,7 @@ def _transcribe_audio_gpt4o(audio_path, model_name='gpt-4o-mini-transcribe', off
     """
     from openai import OpenAI
     import base64, json, re, logging
-    client = OpenAI()
+    client = OpenAI(api_key=settings.OPENAI_API_KEY)
     logger = logging.getLogger('app')
 
     # Read audio and encode to base64

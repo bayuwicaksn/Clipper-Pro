@@ -7,12 +7,23 @@ import time
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# Import caption generator from src
+# Fix path so it can find 'src' and 'shared'
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# Import from local src
 from src.caption.generator import (
     generate_caption_composition, 
     render_composition, 
     composite_transparent_captions
 )
+from shared.db import crud
+from shared.db.database import engine
+from sqlmodel import Session
+from dotenv import load_dotenv
+
+# Load environment variables for local development
+load_dotenv()
 
 # Setup logging
 logging.basicConfig(
@@ -21,6 +32,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger("worker_node")
 
+# Supabase initialization removed - using shared SQLModel engine
+
+# Global event for Graceful Shutdown
+shutdown_event = threading.Event()
+
+# ── Database Update Helper ─────────────────────────────────────────────
+def update_job_db(job_id: str, data: dict):
+    """Update job status/data using shared CRUD logic."""
+    try:
+        with Session(engine) as session:
+            crud.update_job(session, job_id, data)
+            return True
+    except Exception as e:
+        logger.error(f"[{job_id}] Database update failed: {e}")
+        return False
 
 # ── Health Check HTTP Server ──────────────────────────────────────────
 class HealthHandler(BaseHTTPRequestHandler):
@@ -28,7 +54,8 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
         self.end_headers()
-        self.wfile.write(b'{"status":"ok","worker":"node"}')
+        status = "ok" if not shutdown_event.is_set() else "shutting_down"
+        self.wfile.write(json.dumps({"status": status, "worker": "node"}).encode())
 
     def log_message(self, format, *args):
         pass
@@ -38,7 +65,8 @@ def start_health_server():
     port = int(os.getenv("PORT", "8080"))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
     logger.info(f"Health server listening on port {port}")
-    server.serve_forever()
+    while not shutdown_event.is_set():
+        server.handle_request()
 
 
 # ── Rendering Logic ───────────────────────────────────────────────────
@@ -52,32 +80,29 @@ def process_caption_job(job_data: dict) -> None:
     config = job_data.get("config", {})
 
     logger.info(f"[{job_id}] Received caption job for {len(clips)} clips.")
+    
+    final_clips_metadata = []
 
     for i, clip in enumerate(clips):
+        if shutdown_event.is_set():
+            logger.warning(f"[{job_id}] Shutdown requested, skipping remaining clips.")
+            break
+
         try:
             clip_index = clip.get("clip_index", i)
-            logger.info(f"[{job_id}] Rendering captions for Clip {clip_index}")
+            logger.info(f"[{job_id}] Rendering captions for Clip {clip_index+1}/{len(clips)}")
             
-            # 1. Determine paths
-            # In Docker, we assume the shared workspace is mounted at the same path or we use relative
-            # For Cloud Run, we might need to download from GCS first, but if we use local disk for now:
-            
-            # Find the reframed video produced by worker_gpu
-            # Usually it's in clips/clip_XX/exports/clip_XX_vXXXX.mp4
-            # We need to find it based on clip['filename']
             clip_folder = os.path.join(job_dir, 'clips', f'clip_{clip_index + 1:02d}')
             exports_dir = os.path.join(clip_folder, 'exports')
-            
             reframed_video = os.path.join(exports_dir, clip['filename'])
             
             if not os.path.exists(reframed_video):
                 logger.error(f"[{job_id}] Reframed video not found: {reframed_video}")
+                final_clips_metadata.append(clip) # Keep original if failed
                 continue
 
-            # 2. Prepare Caption Data
-            # Prepare word-level transcript mapped to clip-local time
+            # Prepare word-level transcript
             from shared.utils.helpers import timestamp_to_seconds
-            
             transcript_words = clip.get('transcript', [])
             clip_start = timestamp_to_seconds(clip.get('start_time', '00:00:00'))
             
@@ -94,40 +119,53 @@ def process_caption_job(job_data: dict) -> None:
 
             if not custom_words:
                 logger.warning(f"[{job_id}] No words for clip {clip_index}, skipping captions.")
+                final_clips_metadata.append(clip)
                 continue
 
-            # 3. Generate HTML Composition
+            # Render
             caption_settings = config.get('caption_settings', {})
             temp_dir = os.path.join(clip_folder, 'temp_render')
             os.makedirs(temp_dir, exist_ok=True)
             
             composition_html = os.path.join(temp_dir, 'index.html')
-            
             generate_caption_composition(
                 video_src=reframed_video,
                 output_html=composition_html,
                 words=custom_words,
                 settings=caption_settings,
-                video_w=1080, # Assuming 9:16
+                video_w=1080,
                 video_h=1920,
             )
 
-            # 4. Render to Transparent MOV
             overlay_mov = os.path.join(temp_dir, 'overlay.mov')
             render_composition(composition_html, overlay_mov)
 
-            # 5. Composite with FFmpeg
-            final_output = os.path.join(exports_dir, f"{clip['filename'].replace('.mp4', '')}_final.mp4")
+            final_filename = f"{clip['filename'].replace('.mp4', '')}_final.mp4"
+            final_output = os.path.join(exports_dir, final_filename)
             composite_transparent_captions(reframed_video, overlay_mov, final_output)
 
-            logger.info(f"[{job_id}] Clip {clip_index} render complete: {final_output}")
+            # Update metadata to point to the captioned video
+            updated_clip = clip.copy()
+            updated_clip['filename'] = final_filename
+            final_clips_metadata.append(updated_clip)
 
-            # 6. Cleanup temp
+            logger.info(f"[{job_id}] Clip {clip_index} render complete.")
+
+            # Cleanup
             import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)
 
         except Exception as e:
             logger.error(f"[{job_id}] Failed rendering clip {i}: {e}", exc_info=True)
+            final_clips_metadata.append(clip)
+
+    # 7. Update Database to Completed
+    if not shutdown_event.is_set():
+        update_job_db(job_id, {
+            "status": "completed",
+            "clips": json.dumps(final_clips_metadata)
+        })
+        logger.info(f"[{job_id}] Worker Node finished and updated DB to 'completed'.")
 
 
 # ── Pub/Sub Listener ──────────────────────────────────────────────────
@@ -137,13 +175,14 @@ def pull_messages():
 
     if not project_id:
         logger.warning("GCP_PROJECT_ID not set — idle mode")
-        while True:
-            time.sleep(60)
+        while not shutdown_event.is_set():
+            time.sleep(10)
+        return
 
     from google.cloud import pubsub_v1
     retry_delay = 10
 
-    while True:
+    while not shutdown_event.is_set():
         try:
             subscriber = pubsub_v1.SubscriberClient()
             subscription_path = subscriber.subscription_path(project_id, subscription_id)
@@ -155,30 +194,31 @@ def pull_messages():
                     process_caption_job(data)
                     message.ack()
                 except Exception as e:
-                    logger.error(f"Error processing caption job: {e}", exc_info=True)
+                    logger.error(f"Error processing caption job: {e}")
                     message.nack()
 
             streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
-            
             logger.info(f"Listening for messages on {subscription_id}...")
+            
             with subscriber:
-                try:
-                    streaming_pull_future.result()
-                except Exception as e:
-                    if "NotFound" in str(e) or "404" in str(e):
-                        logger.error(f"CRITICAL: Subscription '{subscription_id}' not found in project '{project_id}'. "
-                                     "Please ensure it exists in GCP Console or check your GCP_PROJECT_ID env.")
+                while not shutdown_event.is_set() and not streaming_pull_future.done():
+                    time.sleep(1)
+                
+                if shutdown_event.is_set():
+                    logger.info("Cancelling caption subscription...")
                     streaming_pull_future.cancel()
-                    raise e
+                    streaming_pull_future.result()
+
         except Exception as e:
-            logger.error(f"Pub/Sub Listener Error: {e}")
-            time.sleep(retry_delay)
-            retry_delay = min(retry_delay * 2, 300)
+            if not shutdown_event.is_set():
+                logger.error(f"Pub/Sub Listener Error: {e}")
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 300)
 
 
 def handle_shutdown(signum, frame):
-    logger.info("Shutdown signal received")
-    sys.exit(0)
+    logger.info("Shutdown signal received! Graceful exit initiated...")
+    shutdown_event.set()
 
 
 if __name__ == "__main__":
@@ -189,3 +229,4 @@ if __name__ == "__main__":
     health_thread.start()
 
     pull_messages()
+    logger.info("Worker Node process exited cleanly.")

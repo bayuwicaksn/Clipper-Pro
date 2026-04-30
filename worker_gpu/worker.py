@@ -9,7 +9,13 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 
 # Import from shared modules
 from shared.core.pipeline import Pipeline
-from supabase import create_client
+from shared.db import crud
+from shared.db.database import engine
+from sqlmodel import Session
+from dotenv import load_dotenv
+
+# Load environment variables for local development
+load_dotenv()
 
 # Setup logging
 logging.basicConfig(
@@ -19,31 +25,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger("worker_gpu")
 
-# Initialize Supabase
-supabase = create_client(
-    os.environ["SUPABASE_URL"],
-    os.environ["SUPABASE_KEY"]
-)
+# Supabase initialization removed - using shared SQLModel engine
 
 # Global event untuk Graceful Shutdown
 shutdown_event = threading.Event()
 
-# ── Database Retry Wrapper ─────────────────────────────────────────────
-def update_job_db(job_id: str, data: dict, max_retries: int = 3):
-    """
-    Fungsi wrapper untuk update Supabase dengan mekanisme Retry (Exponential Backoff).
-    Menghindari error 'Broken pipe' saat Cloud Run mengalami network blip.
-    """
-    for attempt in range(max_retries):
-        try:
-            return supabase.table("job").update(data).eq("id", job_id).execute()
-        except Exception as e:
-            if attempt == max_retries - 1:
-                logger.error(f"[{job_id}] Final attempt to update Supabase failed: {e}")
-                raise
-            sleep_time = 2 ** attempt
-            logger.warning(f"[{job_id}] Supabase update failed: {e}. Retrying in {sleep_time}s...")
-            time.sleep(sleep_time)
+# ── Database Update Helper ─────────────────────────────────────────────
+def update_job_db(job_id: str, data: dict):
+    """Update job status/data using shared CRUD logic."""
+    try:
+        with Session(engine) as session:
+            crud.update_job(session, job_id, data)
+            return True
+    except Exception as e:
+        logger.error(f"[{job_id}] Database update failed: {e}")
+        return False
 
 
 # ── Health Check HTTP Server ──────────────────────────────────────────
@@ -98,33 +94,13 @@ def process_job(job_data: dict) -> None:
             update_job_db(job_id, {"status": "completed", "clips": "[]"})
             return
 
-        # 4. Process each clip
-        processed_clips = []
-        for i, clip in enumerate(clips_metadata):
-            try:
-                logger.info(f"[{job_id}] Processing Clip {i+1}/{len(clips_metadata)}")
-                gpu_config = config.copy()
-                gpu_config['enable_captions'] = False
-                gpu_config['enable_hook'] = False
-                
-                pipeline.config = gpu_config
-                final_meta = pipeline.export_single_clip(clip, clip_index=i)
-                processed_clips.append(final_meta)
-                
-            except Exception as clip_err:
-                logger.error(f"[{job_id}] Failed to process clip {i}: {clip_err}")
-
-        # 5. Update Database with results (Menggunakan Retry)
+        # 4. Finish with metadata only (Deferred Rendering)
         update_job_db(job_id, {
             "status": "completed",
-            "clips": json.dumps(processed_clips)
+            "clips": json.dumps(clips_metadata)
         })
-        
-        # 6. Push to Caption Topic
-        if config.get("enable_captions", True):
-            push_to_caption_queue(job_id, job_dir, processed_clips, config)
-        
-        logger.info(f"[{job_id}] Worker GPU finished successfully.")
+        return
+        return
 
     except Exception as e:
         logger.error(f"[{job_id}] Pipeline failed: {e}", exc_info=True)

@@ -385,7 +385,7 @@ jobs:
             --max-instances 1 \
             --timeout 1800 \
             --concurrency 1 \
-            --set-env-vars "ENVIRONMENT=production,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_CAPTION=${{ secrets.PUBSUB_SUBSCRIPTION_CAPTION || 'clipper-caption-jobs-sub' }},GCS_BUCKET=${{ secrets.GCS_BUCKET }}"
+            --set-env-vars "ENVIRONMENT=production,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_CAPTION=${{ secrets.PUBSUB_SUBSCRIPTION_CAPTION || 'clipper-caption-jobs-sub' }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
 
   # ── Job 5: Notify ─────────────────────────────────────────────────────
   notify:

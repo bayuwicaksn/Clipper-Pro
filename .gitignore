@@ -35,6 +35,7 @@ static/exports/
 # GCP credentials
 *-credentials.json
 service-account*.json
+gen-lang-client-*.json
 
 # IDE
 .vscode/
@@ -47,5 +48,14 @@ Thumbs.db
 
 # Local Data
 clipper.db
+clipper.db-shm
+clipper.db-wal
+clipper.db-journal
 cookies.txt
 clipperApp_project.zip
+
+# Task Tracking / AI Prompts
+PHASE*.md
+AUDIT_PROMPT.md
+fix.md
+SECRETS_SETUP.md

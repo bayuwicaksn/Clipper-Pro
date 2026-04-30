@@ -1,9 +1,10 @@
-﻿"""
-ClipperApp Ã¢â‚¬â€ Pipeline Router (FastAPI)
+"""
+ClipperApp â€” Pipeline Router (FastAPI)
 Handles: processing jobs, export, progress streaming (SSE), status.
 """
 
 import os
+from ..core.config import settings
 import json
 import uuid
 import asyncio
@@ -31,15 +32,12 @@ from ..services import job_service
 router = APIRouter(prefix="/api", tags=["pipeline"])
 
 
-
-
-# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Internal Pipeline Runner Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# â”€â”€â”€ Internal Pipeline Runner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 def _run_pipeline(job_id, job_dir, config, progress_callback):
     """Execute the full clipping pipeline via job_service."""
     job_service.start_job(job_id, job_dir, config, progress_callback)
 
 
-# Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬ Routes Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 @router.post('/process')
 async def start_processing(data: ProcessRequest, session: Session = Depends(get_session)):
     """Start the full clipping pipeline by publishing to Pub/Sub."""
@@ -53,8 +51,8 @@ async def start_processing(data: ProcessRequest, session: Session = Depends(get_
     crud.create_job(session, job_id, config)
 
     # Publish to Pub/Sub
-    project_id = os.getenv("GCP_PROJECT_ID")
-    topic_id = os.getenv("PUBSUB_TOPIC_JOBS") or "clipper-jobs"
+    project_id = settings.GCP_PROJECT_ID
+    topic_id = settings.PUBSUB_TOPIC_JOBS
 
     if project_id:
         try:
@@ -72,25 +70,18 @@ async def start_processing(data: ProcessRequest, session: Session = Depends(get_
             logger.info(f"[Pub/Sub] Published job {job_id} to {topic_id}")
         except Exception as e:
             logger.error(f"[Pub/Sub] Failed to publish: {e}")
-            # Fallback or error based on preference. For now, we'll mark as error if Pub/Sub fails in production
+            # Fallback or error based on preference
             if os.getenv("ENVIRONMENT") == "production":
                 crud.update_job_status(session, job_id, 'error', error=f"Pub/Sub Error: {str(e)}")
                 raise HTTPException(status_code=500, detail=f"Failed to queue job: {e}")
     
-    # In local/dev without GCP_PROJECT_ID, we still allow the response but logger warns
     else:
         logger.warning(f"[Dev] GCP_PROJECT_ID not set. Job {job_id} created but not queued.")
 
     return {'job_id': job_id, 'status': 'queued'}
 
 
-@router.post('/pipeline/start')
-async def start_pipeline(data: ProcessRequest, session: Session = Depends(get_session)):
-    """Target architecture alias for starting the pipeline."""
-    return await start_processing(data, session)
-
-
-@router.post('/reprocess/{job_id}')
+@router.post('/pipeline/reprocess/{job_id}')
 async def reprocess_job(job_id: str, data: ReprocessRequest, session: Session = Depends(get_session)):
     """Re-run the pipeline for an existing job."""
     job_dir = resolve_job_dir(job_id)
@@ -150,7 +141,6 @@ async def get_status(job_id: str, session: Session = Depends(get_session)):
             }
         raise HTTPException(status_code=404, detail='Job not found')
     
-    # Format Job object back to dict for compatibility
     return {
         'id': job.id,
         'status': job.status,
@@ -169,20 +159,30 @@ async def stream_progress(job_id: str):
 
     async def event_stream():
         q = progress_queues[job_id]
-        # Send padding to force flush through proxies
         yield ': ' + ' ' * 2048 + '\n\n'
         yield 'data: ' + json.dumps({'step': 'connected', 'message': 'Connected', 'progress': 0}) + '\n\n'
 
         while True:
             try:
-                event = q.get(timeout=0.1)
+                # 1. Check local queue
+                event = q.get(timeout=1.0)
                 yield 'data: ' + json.dumps(event) + '\n\n'
                 if event.get('step') in ('done', 'error'):
                     break
             except queue_module.Empty:
-                # Non-blocking check Ã¢â‚¬â€ yield heartbeat every ~10 seconds
-                await asyncio.sleep(1)
+                # 2. Check Database status (Polling fallback)
+                with Session(engine) as session:
+                    job = crud.get_job(session, job_id)
+                    if job:
+                        if job.status == 'completed':
+                            yield 'data: ' + json.dumps({'step': 'done', 'message': 'Job completed!', 'progress': 100}) + '\n\n'
+                            break
+                        elif job.status == 'error':
+                            yield 'data: ' + json.dumps({'step': 'error', 'message': job.error or 'Job failed', 'progress': 0}) + '\n\n'
+                            break
+                
                 yield 'data: ' + json.dumps({'step': 'heartbeat', 'message': 'Processing...', 'progress': -1}) + '\n\n'
+                await asyncio.sleep(2)
 
     return StreamingResponse(
         event_stream(),
@@ -197,7 +197,7 @@ async def stream_progress(job_id: str):
 
 @router.get('/progress-poll/{job_id}')
 async def poll_progress(job_id: str, session: Session = Depends(get_session)):
-    """Polling fallback when SSE doesn't work through tunnels."""
+    """Polling fallback."""
     job = crud.get_job(session, job_id)
     if not job:
         raise HTTPException(status_code=404, detail='Job not found')
@@ -213,7 +213,7 @@ async def poll_progress(job_id: str, session: Session = Depends(get_session)):
 
 @router.post('/export/{job_id}')
 async def export_clip(job_id: str, data: ExportRequest, session: Session = Depends(get_session)):
-    """Start the targeted FFmpeg processing for a single tweaked clip."""
+    """Start targeted FFmpeg processing for a single clip."""
     job_dir = resolve_job_dir(job_id)
     if not job_dir:
         raise HTTPException(status_code=404, detail='Job not found')
@@ -222,19 +222,14 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
     clip_index = data.clip_index
     logger.info(f"[EXPORT] job_id={job_id}, filename={filename}, clip_index={clip_index}")
 
-    # Find clip metadata
     json_path = None
-
     if is_new_layout(job_dir):
         clips_root = os.path.join(job_dir, 'clips')
-        
         if clip_index is not None:
             folder_name = f'clip_{int(clip_index)+1:02d}'
             direct_meta = os.path.join(clips_root, folder_name, 'meta.json')
-            print(f"[EXPORT] Trying direct path: {direct_meta}")
             if os.path.exists(direct_meta):
                 json_path = direct_meta
-                print(f"[EXPORT] Found meta.json via direct folder lookup")
         
         if not json_path:
             for clip_folder in sorted(os.listdir(clips_root)):
@@ -245,82 +240,33 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
                     if filename and m.get('filename') == filename:
                         json_path = meta_path
                         clip_index = m.get('clip_index', 0)
-                        print(f"[EXPORT] Found meta.json via filename match in {clip_folder}")
                         break
-        
-        if not json_path:
-            for clip_folder in sorted(os.listdir(clips_root)):
-                meta_path = os.path.join(clips_root, clip_folder, 'meta.json')
-                if os.path.exists(meta_path):
-                    json_path = meta_path
-                    clip_index = clip_index if clip_index is not None else 0
-                    print(f"[EXPORT] Fallback: using first meta.json found in {clip_folder}")
-                    break
 
     if not json_path:
-        json_path = os.path.join(job_dir, 'output', (filename or '').replace('.mp4', '.json'))
-    if not os.path.exists(json_path):
-        logger.error(f"[EXPORT] ERROR: No meta.json found! json_path={json_path}")
         raise HTTPException(status_code=404, detail='Clip metadata not found')
 
     with open(json_path, 'r', encoding='utf-8') as f:
-        metadata = json.load(f)
-    metadata['auto_background_enabled'] = data.auto_background_enabled
-        
-    config = {}
-    for loc in ['session.json', os.path.join('output', 'session.json')]:
-        session_path = os.path.join(job_dir, loc)
-        if os.path.exists(session_path):
-            with open(session_path, 'r', encoding='utf-8') as f:
-                config = json.load(f).get('config', {})
-            break
+        clip_metadata = json.load(f)
 
-    if data.caption_settings:
-        print(f"[DEBUG] Exporting with caption settings: {data.caption_settings}")
-        config['caption_settings'] = data.caption_settings
-
-    if data.transcript:
-        metadata['transcript'] = data.transcript
-    else:
-        try:
-            source_transcript_path = os.path.join(job_dir, 'source_transcript.json')
-            if os.path.exists(source_transcript_path):
-                with open(source_transcript_path, 'r', encoding='utf-8') as f:
-                    raw = json.load(f)
-                all_words = raw.get('words', raw) if isinstance(raw, dict) else raw
-                
-                segs = data.segments or []
-                if segs:
-                    clip_start = min(s.get('start', 0) for s in segs)
-                    clip_end = max(s.get('end', 0) for s in segs)
-                else:
-                    clip_start = timestamp_to_seconds(metadata.get('start_time', '00:00:00'))
-                    clip_end = timestamp_to_seconds(metadata.get('end_time', '00:00:00'))
-                
-                filtered = filter_words_by_range(all_words, clip_start, clip_end)
-                metadata['transcript'] = filtered
-                print(f"[EXPORT] Loaded {len(filtered)} words from source_transcript.json (range: {clip_start:.1f}s - {clip_end:.1f}s)")
-        except Exception as e:
-            print(f"[EXPORT] Warning: could not load source transcript: {e}")
-
-    export_id = f"{job_id}-export-{int(time.time())}"
+    export_id = f"export_{job_id}_{clip_index or 0}"
+    callback = create_progress_callback(export_id)
     
-    crud.create_job(session, export_id, {})
+    def _run_export():
+        try:
+            from shared.core.pipeline import Pipeline
+            p = Pipeline(job_dir, {}, progress_callback=callback)
+            p.export_single_clip(
+                clip_metadata,
+                custom_start=data.custom_start,
+                custom_end=data.custom_end,
+                custom_crop_x=data.custom_crop_x,
+                segments=data.segments,
+                aspect_ratio=data.aspect_ratio
+            )
+            callback('done', 'Export successful', 100)
+        except Exception as e:
+            logger.error(f"[EXPORT] Failed: {e}")
+            callback('error', str(e), 0)
 
-    def run_export():
-        callback = create_progress_callback(export_id)
-        job_service.start_export(
-            export_id, 
-            job_dir, 
-            metadata, 
-            clip_index, 
-            data, 
-            config, 
-            json_path, 
-            callback
-        )
-
-    thread = threading.Thread(target=run_export, daemon=True)
-    thread.start()
-
-    return {'export_id': export_id, 'status': 'queued'}
+    threading.Thread(target=_run_export, daemon=True).start()
+    return {"export_id": export_id, "status": "started"}
