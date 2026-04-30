@@ -53,6 +53,7 @@ clipper.db-wal
 clipper.db-journal
 cookies.txt
 clipperApp_project.zip
+desktop-download.json
 
 # Task Tracking / AI Prompts
 PHASE*.md
