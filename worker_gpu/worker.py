@@ -173,7 +173,8 @@ def process_export_job(job_data: dict) -> None:
     clip_metadata = job_data.get("clip_metadata")
     config = job_data.get("export_config", {})
     
-    export_id = f"export_{job_id}_{clip_metadata.get('clip_index', 0)}"
+    # Use the specific export_id provided by the backend, or fallback if missing
+    export_id = job_data.get("export_id") or f"export_{job_id}_{clip_metadata.get('clip_index', 0)}"
     
     # ── Check if this job should even run ──
     try:
@@ -214,8 +215,10 @@ def process_export_job(job_data: dict) -> None:
             custom_end=config.get("custom_end"),
             custom_crop_x=config.get("custom_crop_x"),
             segments=config.get("segments"),
-            aspect_ratio=config.get("aspect_ratio"),
-            delegate_captions=True
+            aspect_ratio=config.get("aspect_ratio", "9:16"),
+            auto_background_enabled=job_data.get("auto_background_enabled", True),
+            delegate_captions=True,
+            export_id=export_id
         )
         
         # ── Step 2: Handle Caption Decision ──

@@ -153,7 +153,8 @@ class Pipeline:
 
     def export_single_clip(self, highlight, custom_start=None, custom_end=None, 
                            custom_crop_x=None, segments=None, aspect_ratio='9:16', 
-                           auto_background_enabled=True, delegate_captions=False):
+                           auto_background_enabled=True, delegate_captions=False,
+                           export_id=None):
         """
         Export a single clip with full processing.
         If delegate_captions=True, it will skip caption rendering and return metadata for worker_node.
@@ -161,7 +162,10 @@ class Pipeline:
         import time
         index = highlight.get('clip_index', 0)
         total = 1 # We are doing single export
-        clip_name = highlight.get('filename', f'clip_{index+1:02d}.mp4').replace('.mp4', '')
+        base_name = highlight.get('filename', f'clip_{index+1:02d}.mp4').replace('.mp4', '')
+        
+        # If export_id is provided, make the filename unique to avoid overwriting
+        clip_name = f"{base_name}_{export_id}" if export_id else base_name
         
         # Ensure workspace subdirs exist
         temp_dir = os.path.join(self.job_dir, 'clips', f'clip_{index+1:02d}', 'segments', f'run_{int(time.time())}')

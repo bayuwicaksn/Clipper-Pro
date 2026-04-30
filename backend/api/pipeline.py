@@ -289,7 +289,8 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
     with open(json_path, 'r', encoding='utf-8') as f:
         clip_metadata = json.load(f)
 
-    export_id = f"export_{job_id}_{clip_index or 0}"
+    # Generate a unique export ID to avoid overwriting previous runs of the same clip
+    export_id = f"export_{job_id}_{clip_index or 0}_{str(uuid.uuid4())[:8]}"
 
     # 1. Create the job record in DB so the worker can update it
     try:
@@ -322,6 +323,7 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
             pub = Publisher(project_id)
             export_payload = {
                 "job_id": job_id,
+                "export_id": export_id,
                 "job_dir": job_dir,
                 "clip_metadata": clip_metadata,
                 "export_config": data.model_dump(),
