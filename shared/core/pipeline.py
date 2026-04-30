@@ -1,4 +1,4 @@
-﻿"""
+"""
 Pipeline â€” Orchestrates all processing modules in sequence
 """
 
@@ -138,7 +138,7 @@ class Pipeline:
                 }
                 clips_result.append(clip_data)
 
-            # â”€â”€â”€ Step 7: Save metadata â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            # ————————————————————————————————————————————————————————————————————————
             self.progress('finalize', 'Finalizing project workspace...', 95)
             self._save_metadata(clips_result, video_metadata)
 
@@ -151,73 +151,77 @@ class Pipeline:
 
         return clips_result
 
-    def export_single_clip(self, clip_metadata, custom_start=None, custom_end=None, custom_crop_x=None, segments=None, clip_index=None, aspect_ratio='9:16'):
-        """Run the actual rendering pipeline for a single tweaked clip."""
-        segments_dir = None
-        try:
-            self.progress('clip', 'Clipping precision segment...', 10)
-            
-            video_path = os.path.join(self.job_dir, 'source.mp4')
-            if not os.path.exists(video_path):
-                for f in os.listdir(self.job_dir):
-                    if f.endswith('.mp4') and not os.path.isdir(os.path.join(self.job_dir, f)):
-                        video_path = os.path.join(self.job_dir, f)
-                        break
-            
-            if custom_start: clip_metadata['start_time'] = custom_start
-            if custom_end: clip_metadata['end_time'] = custom_end
-            if custom_crop_x is not None: clip_metadata['custom_crop_x'] = custom_crop_x
-            if segments: clip_metadata['segments'] = segments
-            clip_metadata['auto_background_enabled'] = clip_metadata.get('auto_background_enabled', True)
+    def export_single_clip(self, highlight, custom_start=None, custom_end=None, 
+                           custom_crop_x=None, segments=None, aspect_ratio='9:16', 
+                           auto_background_enabled=True, delegate_captions=False):
+        """
+        Export a single clip with full processing.
+        If delegate_captions=True, it will skip caption rendering and return metadata for worker_node.
+        """
+        import time
+        index = highlight.get('clip_index', 0)
+        total = 1 # We are doing single export
+        clip_name = highlight.get('filename', f'clip_{index+1:02d}.mp4').replace('.mp4', '')
+        
+        # Ensure workspace subdirs exist
+        temp_dir = os.path.join(self.job_dir, 'clips', f'clip_{index+1:02d}', 'segments', f'run_{int(time.time())}')
+        os.makedirs(temp_dir, exist_ok=True)
 
-            # Determine which clip index to use for directory
-            idx = clip_index if clip_index is not None else clip_metadata.get('clip_index', 0)
-            clip_dir = self._clip_dir(idx)
+        # Output folder for final exports
+        exports_dir = os.path.join(self.job_dir, 'clips', f'clip_{index+1:02d}', 'exports')
+        os.makedirs(exports_dir, exist_ok=True)
+        
+        # Path for the reframed (but potentially not captioned) result
+        # We use exports_dir for the intermediate reframed file if delegating
+        if delegate_captions:
+            reframed_path = os.path.join(exports_dir, f'{clip_name}_reframed.mp4')
+        else:
+            reframed_path = os.path.join(temp_dir, f'{clip_name}_reframed.mp4')
+            
+        current_path = os.path.join(self.job_dir, 'source.mp4') # Start from source
 
-            # Use a unique segments subdirectory per export to avoid Windows file locks
-            import time as _time
-            export_ts = int(_time.time())
-            segments_dir = os.path.join(clip_dir, 'segments', f'run_{export_ts}')
+        # â”€â”€â”€ Step 1: Clipping + Reframing (Always done on GPU) â”€â”€â”€
+        self.progress('clip', f'Clipping precision segment...', 10)
+        from .reframer import reframe_clip
+        
+        # Determine start/end times
+        from shared.utils.helpers import timestamp_to_seconds
+        
+        start_time = custom_start if custom_start is not None else highlight.get('start_time', 0)
+        end_time = custom_end if custom_end is not None else highlight.get('end_time', 0)
+        
+        # Ensure they are floats (seconds)
+        if isinstance(start_time, str): start_time = timestamp_to_seconds(start_time)
+        if isinstance(end_time, str): end_time = timestamp_to_seconds(end_time)
+        
+        # Note: reframer will handle the actual ffmpeg call
+        reframe_clip(
+            current_path, reframed_path, 
+            mode='mediapipe', 
+            progress_callback=self.progress,
+            clip_index=index, total_clips=total,
+            custom_crop_x=custom_crop_x,
+            segments=segments,
+            aspect_ratio=aspect_ratio,
+            auto_background_enabled=auto_background_enabled,
+            start_time=start_time,
+            end_time=end_time
+        )
 
-            from .clipper import clip_segments
-            raw_clips = clip_segments(
-                video_path, [clip_metadata], segments_dir,
-                progress_callback=None
-            )
-            
-            if not raw_clips:
-                raise RuntimeError("Clipping failed.")
-                
-            raw_clip_path = raw_clips[0]
-            
-            final_data = self._process_single_clip(
-                raw_clip_path, clip_metadata, idx, 1,
-                aspect_ratio=aspect_ratio,
-                work_dir=segments_dir
-            )
-            
-            # Cleanup temporary segments directory
-            if segments_dir:
-                try:
-                    import shutil
-                    shutil.rmtree(segments_dir, ignore_errors=True)
-                except Exception:
-                    pass
+        if os.path.exists(reframed_path) and os.path.getsize(reframed_path) > 0:
+            current_path = reframed_path
 
-            self.progress('done', 'Export finished.', 100)
-            return final_data
-            
-        except Exception as e:
-            traceback.print_exc()
-            # Cleanup on error too
-            if segments_dir:
-                try:
-                    import shutil
-                    shutil.rmtree(segments_dir, ignore_errors=True)
-                except Exception:
-                    pass
-            self.progress('error', f'Export failed: {str(e)}', 0)
-            raise
+        # If we are delegating, stop here and return the path
+        if delegate_captions:
+            self.logger.info(f"[Pipeline] Reframing complete. Delegating captions to Node worker.")
+            return {
+                "video_path": current_path,
+                "status": "ready_for_captions",
+                "export_path": os.path.join(exports_dir, f"{clip_name}_final.mp4")
+            }
+
+        # â”€â”€â”€ Step 2: Hook intro (optional TTS + blurred intro) â”€â”€â”€
+        return self._process_single_clip(current_path, highlight, index, total, aspect_ratio, temp_dir)
 
     def _process_single_clip(self, raw_clip_path, highlight, index, total, aspect_ratio='9:16', work_dir=None):
         """Process a single clip through reframe â†’ captions â†’ hook (all FFmpeg-native)."""
@@ -274,31 +278,58 @@ class Pipeline:
                 self.logger.warning(f"Hook generation failed (non-fatal): {e}")
 
         # â”€â”€â”€ Step 3: Captions (HyperFrames composition + GSAP) â”€â”€â”€â”€
-        if self.config.get('enable_captions', True):
+        caption_settings = self.config.get('caption_settings', {})
+        if self.config.get('enable_captions', True) and caption_settings.get('presetId') != 'none':
             self.progress('caption', f'Generating caption composition...', 70)
             captioned_path = os.path.join(temp_dir, f'{clip_name}_final.mp4')
 
             # Prepare word-level transcript mapped to clip-local time
             custom_words = None
             transcript_words = highlight.get('transcript', [])
+            
+            # Fallback: Try to load from source_transcript.json if missing in metadata
+            if not transcript_words:
+                transcript_path = os.path.join(self.job_dir, "source_transcript.json")
+                if os.path.exists(transcript_path):
+                    try:
+                        with open(transcript_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            # Handle different transcription formats (list or dict with 'words' key)
+                            if isinstance(data, list):
+                                transcript_words = data
+                            elif isinstance(data, dict):
+                                transcript_words = data.get('words', [])
+                        self.logger.info(f"[Pipeline] Loaded {len(transcript_words)} words from source_transcript.json for mapping")
+                    except Exception as e:
+                        self.logger.warning(f"[Pipeline] Failed to load source_transcript.json: {e}")
+
             if transcript_words:
                 clip_start = timestamp_to_seconds(highlight.get('start_time', '00:00:00'))
+                clip_end = timestamp_to_seconds(highlight.get('end_time', '00:00:00'))
+                
                 custom_words = []
                 for w in transcript_words:
-                    local_start = w.get('start', 0) - clip_start
-                    local_end = w.get('end', 0) - clip_start
-                    if local_end > 0:
+                    w_start = w.get('start', 0)
+                    w_end = w.get('end', 0)
+                    
+                    # Only include words within the clip range
+                    if w_start >= clip_start and w_end <= clip_end:
+                        local_start = w_start - clip_start
+                        local_end = w_end - clip_start
                         custom_words.append({
                             'word': w.get('word', w.get('text', '')),
                             'start': max(0, local_start),
                             'end': max(0, local_end)
                         })
+                
+                self.logger.info(f"[Pipeline] Mapped {len(custom_words)} words for clip duration.")
 
             caption_success = False
             caption_settings = self.config.get('caption_settings', {})
 
             # Try HyperFrames composition-based rendering first
             if custom_words and caption_settings.get('presetId') != 'none':
+                self.logger.info(f"[Pipeline] ðŸŽ¨ ACTIVATING HYPERFRAMES (Premium Rendering)...")
                 try:
                     from .caption_composition import generate_caption_composition, render_composition
 

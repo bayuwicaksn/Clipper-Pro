@@ -141,12 +141,22 @@ async def get_status(job_id: str, session: Session = Depends(get_session)):
             }
         raise HTTPException(status_code=404, detail='Job not found')
     
+    def safe_json(val):
+        if isinstance(val, (dict, list)):
+            return val
+        if isinstance(val, str):
+            try:
+                return json.loads(val)
+            except:
+                return {}
+        return val
+
     return {
         'id': job.id,
         'status': job.status,
-        'config': json.loads(job.config) if job.config else {},
-        'created_at': job.created_at.isoformat(),
-        'clips': json.loads(job.clips) if job.clips else [],
+        'config': safe_json(job.config),
+        'created_at': job.created_at.isoformat() if hasattr(job.created_at, 'isoformat') else str(job.created_at),
+        'clips': safe_json(job.clips) or [],
         'error': job.error
     }
 
@@ -180,8 +190,13 @@ async def stream_progress(job_id: str):
                         elif job.status == 'error':
                             yield 'data: ' + json.dumps({'step': 'error', 'message': job.error or 'Job failed', 'progress': 0}) + '\n\n'
                             break
+                        elif job.status == 'processing':
+                            yield 'data: ' + json.dumps({
+                                'step': 'processing',
+                                'message': job.error or 'Processing...',
+                                'progress': getattr(job, 'progress', 0)
+                            }) + '\n\n'
                 
-                yield 'data: ' + json.dumps({'step': 'heartbeat', 'message': 'Processing...', 'progress': -1}) + '\n\n'
                 await asyncio.sleep(2)
 
     return StreamingResponse(
@@ -202,12 +217,22 @@ async def poll_progress(job_id: str, session: Session = Depends(get_session)):
     if not job:
         raise HTTPException(status_code=404, detail='Job not found')
     
+    def safe_json(val):
+        if isinstance(val, (dict, list)):
+            return val
+        if isinstance(val, str):
+            try:
+                return json.loads(val)
+            except:
+                return {}
+        return val
+
     latest = progress_states.get(job_id, {'step': 'waiting', 'message': 'Starting...', 'progress': 0})
     return {
         'status': job.status,
         'latest_event': latest,
         'error': job.error,
-        'clips': json.loads(job.clips) if job.clips else [],
+        'clips': safe_json(job.clips) or [],
     }
 
 
@@ -249,7 +274,61 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
         clip_metadata = json.load(f)
 
     export_id = f"export_{job_id}_{clip_index or 0}"
-    callback = create_progress_callback(export_id)
+
+    # 1. Create the job record in DB so the worker can update it
+    try:
+        from shared.db.models import Job
+        from shared.db.database import engine
+        from sqlmodel import Session
+        # Create or Reset job record for tracking
+        existing_job = crud.get_job(session, export_id)
+        if existing_job:
+            crud.update_job(session, export_id, {
+                "status": "queued",
+                "error": None,
+                "updated_at": datetime.now()
+            })
+            logger.info(f"[EXPORT] Reset existing job record for retry: {export_id}")
+        else:
+            try:
+                crud.create_job(session, Job(
+                    id=export_id,
+                    status="queued",
+                    config=json.dumps(data.model_dump())
+                ))
+            except Exception as e:
+                logger.warning(f"[EXPORT] Failed to create job record: {e}")
+    except Exception as e:
+        logger.warning(f"[EXPORT] Job record creation skipped (maybe exists): {e}")
+
+    # 2. Use a dedicated topic for exports (Recommended for isolation)
+    project_id = settings.GCP_PROJECT_ID
+    topic_id = settings.PUBSUB_TOPIC_EXPORT 
+
+    if project_id:
+        try:
+            from google.cloud import pubsub_v1
+            publisher = pubsub_v1.PublisherClient()
+            topic_path = publisher.topic_path(project_id, topic_id)
+            
+            # Prepare export data
+            export_data = {
+                "job_id": job_id,
+                "job_dir": job_dir,
+                "clip_metadata": clip_metadata,
+                "export_config": data.model_dump(),
+                "timestamp": time.time()
+            }
+
+            publisher.publish(topic_path, json.dumps(export_data).encode("utf-8")).result(timeout=30)
+            logger.info(f"[Pub/Sub] Export job for {job_id} sent to {topic_id}")
+            return {"export_id": export_id, "status": "queued"}
+        except Exception as e:
+            logger.error(f"[Pub/Sub] Failed to publish export: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to queue export: {e}")
+
+    # Fallback for local development if GCP is not configured
+    logger.warning("[Dev] GCP_PROJECT_ID not set. Running export locally (not recommended).")
     
     def _run_export():
         try:
@@ -269,4 +348,4 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
             callback('error', str(e), 0)
 
     threading.Thread(target=_run_export, daemon=True).start()
-    return {"export_id": export_id, "status": "started"}
+    return {"export_id": export_id, "status": "started_local"}

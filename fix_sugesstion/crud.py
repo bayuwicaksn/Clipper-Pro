@@ -98,7 +98,6 @@ def update_job_clips(
     session: Session, job_id: str, clips: list
 ) -> Optional[Job]:
     """Persist a new clips list (serialised as JSON) for *job_id*."""
-    job = get_job_config(session, job_id) # wait, the fix had get_job
     job = get_job(session, job_id)
     if not job:
         logger.warning("update_job_clips: job %s not found", job_id)

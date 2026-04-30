@@ -35,8 +35,11 @@ class Settings(BaseSettings):
 
     PUBSUB_TOPIC_JOBS: str = "clipper-jobs"
     PUBSUB_TOPIC_CAPTION: str = "clipper-caption-jobs"
+    PUBSUB_TOPIC_EXPORT: str = "clipper-export-jobs"
+
     PUBSUB_SUBSCRIPTION_JOBS: str = "clipper-jobs-sub"
     PUBSUB_SUBSCRIPTION_CAPTION: str = "clipper-caption-jobs-sub"
+    PUBSUB_SUBSCRIPTION_EXPORT: str = "clipper-export-jobs-sub"
 
     # ── Worker / GPU ──────────────────────────────────────────────────────
     WHISPER_MODEL: str = "medium"

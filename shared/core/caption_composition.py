@@ -1,4 +1,4 @@
-﻿"""
+"""
 Caption Composition Generator â€” HyperFrames HTML + GSAP
 Generates a single HTML composition file that renders identically
 in both the browser preview (<hyperframes-player>) and export (npx hyperframes render).
@@ -383,7 +383,7 @@ def generate_caption_composition(
 </head>
 <body>
 <div id="root" data-composition-id="captions"
-     data-start="0" data-width="{video_w}" data-height="{video_h}">
+     data-start="0" data-duration="{total_duration}" data-width="{video_w}" data-height="{video_h}">
 
 {video_html}
 

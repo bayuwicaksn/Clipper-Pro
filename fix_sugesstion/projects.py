@@ -192,7 +192,7 @@ async def list_clips(job_id: str):
             exported_files: List[str] = []
             if os.path.exists(exports_dir):
                 intermediate_suffixes = (
-                    "_reframed.mp4", "_hooked.mp4", "_raw.mp4",
+                    "_reframed.mp4", "_final.mp4", "_hooked.mp4", "_raw.mp4",
                 )
                 exported_files = sorted(
                     [

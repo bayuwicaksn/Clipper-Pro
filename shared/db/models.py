@@ -5,6 +5,7 @@ from typing import Optional
 class Job(SQLModel, table=True):
     id: str = Field(primary_key=True)
     status: str
+    progress: int = Field(default=0)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     error: Optional[str] = Field(default=None)

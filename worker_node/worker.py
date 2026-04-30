@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+# Load environment variables FIRST before any shared imports
+load_dotenv()
+
 import os
 import sys
 import json
@@ -20,10 +24,6 @@ from src.caption.generator import (
 from shared.db import crud
 from shared.db.database import engine
 from sqlmodel import Session
-from dotenv import load_dotenv
-
-# Load environment variables for local development
-load_dotenv()
 
 # Setup logging
 logging.basicConfig(
@@ -79,7 +79,22 @@ def process_caption_job(job_data: dict) -> None:
     clips = job_data.get("clips", [])
     config = job_data.get("config", {})
 
-    logger.info(f"[{job_id}] Received caption job for {len(clips)} clips.")
+    logger.info(f"[{job_id}] Received caption job. Checking status...")
+    
+    # ── Check if this job should even run ──
+    try:
+        from shared.db.database import engine
+        from shared.db import crud
+        from sqlmodel import Session
+        with Session(engine) as session:
+            existing_job = crud.get_job(session, job_id)
+            if existing_job and existing_job.status in ["completed", "error"]:
+                logger.info(f"[{job_id}] Skipping captioning as it is already in '{existing_job.status}' state.")
+                return
+    except Exception as e:
+        logger.warning(f"[{job_id}] Could not verify job status in DB: {e}")
+
+    logger.info(f"[{job_id}] Starting caption job for {len(clips)} clips.")
     
     final_clips_metadata = []
 
@@ -96,21 +111,43 @@ def process_caption_job(job_data: dict) -> None:
             exports_dir = os.path.join(clip_folder, 'exports')
             reframed_video = os.path.join(exports_dir, clip['filename'])
             
+            # Delegation check: if the target video doesn't exist, check for the _reframed version from GPU worker
             if not os.path.exists(reframed_video):
-                logger.error(f"[{job_id}] Reframed video not found: {reframed_video}")
-                final_clips_metadata.append(clip) # Keep original if failed
-                continue
+                reframed_alt = os.path.join(exports_dir, clip['filename'].replace('.mp4', '_reframed.mp4'))
+                if os.path.exists(reframed_alt):
+                    logger.info(f"[{job_id}] Found delegated reframed video: {reframed_alt}")
+                    reframed_video = reframed_alt
+                else:
+                    logger.error(f"[{job_id}] Reframed video not found: {reframed_video} or {reframed_alt}")
+                    final_clips_metadata.append(clip)
+                    continue
 
             # Prepare word-level transcript
             from shared.utils.helpers import timestamp_to_seconds
             transcript_words = clip.get('transcript', [])
+            
+            # Fallback: Try to load from source_transcript.json if missing
+            if not transcript_words:
+                transcript_path = os.path.join(job_dir, "source_transcript.json")
+                if os.path.exists(transcript_path):
+                    try:
+                        with open(transcript_path, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            transcript_words = data if isinstance(data, list) else data.get('words', [])
+                        logger.info(f"[{job_id}] Loaded fallback transcript from source_transcript.json")
+                    except Exception as e:
+                        logger.warning(f"[{job_id}] Failed to load fallback transcript: {e}")
+
             clip_start = timestamp_to_seconds(clip.get('start_time', '00:00:00'))
+            clip_end = timestamp_to_seconds(clip.get('end_time', '00:00:00'))
             
             custom_words = []
             for w in transcript_words:
-                local_start = w.get('start', 0) - clip_start
-                local_end = w.get('end', 0) - clip_start
-                if local_end > 0:
+                w_start = w.get('start', 0)
+                w_end = w.get('end', 0)
+                if w_start >= clip_start and w_end <= clip_end:
+                    local_start = w_start - clip_start
+                    local_end = w_end - clip_start
                     custom_words.append({
                         'word': w.get('word', w.get('text', '')),
                         'start': max(0, local_start),
@@ -190,12 +227,13 @@ def pull_messages():
 
             def callback(message):
                 try:
+                    # Always acknowledge IMMEDIATELY to prevent infinite retry loops on startup
+                    message.ack()
+                    
                     data = json.loads(message.data.decode("utf-8"))
                     process_caption_job(data)
-                    message.ack()
                 except Exception as e:
                     logger.error(f"Error processing caption job: {e}")
-                    message.nack()
 
             streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
             logger.info(f"Listening for messages on {subscription_id}...")

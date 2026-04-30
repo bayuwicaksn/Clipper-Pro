@@ -1,4 +1,4 @@
-﻿"""
+"""
 Reframer â€” Convert 16:9 landscape to 9:16 portrait with face/speaker tracking
 GPU-accelerated encoding when NVIDIA GPU is available.
 """
@@ -8,12 +8,21 @@ import subprocess
 import cv2
 import numpy as np
 import math
-import mediapipe as mp
 from .gpu_utils import get_ffmpeg_video_encode_args, has_nvidia_gpu
-
-# Set up MediaPipe FaceMesh globally
-mp_face_mesh = mp.solutions.face_mesh
-mp_drawing = mp.solutions.drawing_utils
+try:
+    import mediapipe.python.solutions.face_mesh as mp_face_mesh
+    import mediapipe.python.solutions.drawing_utils as mp_drawing
+    import mediapipe.python.solutions.drawing_styles as mp_drawing_styles
+except ImportError:
+    try:
+        from mediapipe.solutions import face_mesh as mp_face_mesh
+        from mediapipe.solutions import drawing_utils as mp_drawing
+        from mediapipe.solutions import drawing_styles as mp_drawing_styles
+    except ImportError:
+        import mediapipe as mp
+        mp_face_mesh = getattr(mp.solutions, 'face_mesh', None)
+        mp_drawing = getattr(mp.solutions, 'drawing_utils', None)
+        mp_drawing_styles = getattr(mp.solutions, 'drawing_styles', None)
 
 # Note: OpenCV hardware decoding (d3d11va/cuvid) is intentionally DISABLED.
 # On GTX 1050 Ti (4GB VRAM), it conflicts with YOLO + FFmpeg encoding.
@@ -85,7 +94,10 @@ def get_face_center_x(clip_path, timestamp_sec):
     cap.release()
     return 0.5
 
-def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None, clip_index=0, total_clips=1, custom_crop_x=None, segments=None, aspect_ratio='9:16', auto_background_enabled=True):
+def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None, 
+                 clip_index=0, total_clips=1, custom_crop_x=None, segments=None, 
+                 aspect_ratio='9:16', auto_background_enabled=True,
+                 start_time=None, end_time=None):
     """
     Convert a 16:9 clip to a target aspect ratio with face tracking.
     """
@@ -96,14 +108,27 @@ def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None, 
     except Exception:
         target_ratio = 9/16  # Default fallback
         
+    # Calculate frame range
+    cap_temp = cv2.VideoCapture(clip_path)
+    fps = cap_temp.get(cv2.CAP_PROP_FPS) or 30.0
+    total_source_frames = int(cap_temp.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap_temp.release()
+
+    start_frame = int(start_time * fps) if start_time is not None else 0
+    end_frame = int(end_time * fps) if end_time is not None else total_source_frames
+    
+    # Clip to source limits
+    start_frame = max(0, min(start_frame, total_source_frames - 1))
+    end_frame = max(start_frame + 1, min(end_frame, total_source_frames))
+
     if segments:
-        crop_positions = _track_with_segments(clip_path, segments, target_ratio)
+        crop_positions = _track_with_segments(clip_path, segments, target_ratio, start_frame, end_frame)
     elif custom_crop_x is not None:
-        crop_positions = _track_with_override(clip_path, custom_crop_x, target_ratio)
+        crop_positions = _track_with_override(clip_path, custom_crop_x, target_ratio, start_frame, end_frame)
     elif mode == 'mediapipe' or mode == 'yolo':
-        crop_positions = _track_with_mediapipe(clip_path, target_ratio)
+        crop_positions = _track_with_mediapipe(clip_path, target_ratio, start_frame, end_frame)
     else:
-        crop_positions = _track_with_opencv(clip_path, target_ratio)
+        crop_positions = _track_with_opencv(clip_path, target_ratio, start_frame, end_frame)
 
     if progress_callback:
         base = 40 + int((clip_index / total_clips) * 10)
@@ -111,10 +136,12 @@ def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None, 
     else:
         base = 40
 
-    _apply_crop(clip_path, output_path, crop_positions, target_ratio, progress_callback, base, auto_background_enabled=auto_background_enabled)
+    _apply_crop(clip_path, output_path, crop_positions, target_ratio, progress_callback, base, 
+                auto_background_enabled=auto_background_enabled, 
+                start_frame=start_frame, end_frame=end_frame)
 
 
-def _track_with_override(clip_path, custom_crop_x_pct, target_ratio):
+def _track_with_override(clip_path, custom_crop_x_pct, target_ratio, start_frame, end_frame):
     """Static framing using a user-provided percentage override (0.0 to 1.0)"""
     cap = cv2.VideoCapture(clip_path)
     if not cap.isOpened(): return []
@@ -134,14 +161,14 @@ def _track_with_override(clip_path, custom_crop_x_pct, target_ratio):
         crop_x = max(0, min(crop_x, width - crop_w))
     
     positions = []
-    for i in range(total_frames):
+    for i in range(start_frame, end_frame):
         positions.append({'frame': i, 'x': crop_x, 'w': crop_w})
     
     cap.release()
     return positions
 
 
-def _track_with_opencv(clip_path, target_ratio):
+def _track_with_opencv(clip_path, target_ratio, start_frame, end_frame):
     """Fallback static tracking using OpenCV's Haar Cascade (Zero Movement)."""
     cap = cv2.VideoCapture(clip_path)
     if not cap.isOpened(): return []
@@ -173,14 +200,14 @@ def _track_with_opencv(clip_path, target_ratio):
         crop_x = max(0, min(int(locked_cx) - crop_w // 2, width - crop_w))
     
     positions = []
-    for i in range(total_frames):
+    for i in range(start_frame, end_frame):
         positions.append({'frame': i, 'x': crop_x, 'w': crop_w})
     
     cap.release()
     return positions
 
 
-def _track_with_segments(clip_path, segments, target_ratio):
+def _track_with_segments(clip_path, segments, target_ratio, start_frame, end_frame):
     """
     Apply multiple crop positions over time based on segments.
     segments: list of {'start': seconds, 'end': seconds, 'crop_x': offset_pct, 'crop_y': offset_pct, 'crop_z': zoom}
@@ -216,7 +243,7 @@ def _track_with_segments(clip_path, segments, target_ratio):
         base_viewport_w = height * target_ratio
 
     positions = []
-    for i in range(total_frames):
+    for i in range(start_frame, end_frame):
         ts = i / fps
         active_seg = None
         for seg in local_segments:
@@ -253,7 +280,7 @@ def _track_with_segments(clip_path, segments, target_ratio):
     return positions
 
 
-def _track_with_mediapipe(clip_path, target_ratio):
+def _track_with_mediapipe(clip_path, target_ratio, start_frame, end_frame):
     """
     Reframes a 16:9 video to a target aspect ratio.
     Uses MediaPipe FaceMesh to track faces and locks center.
@@ -317,11 +344,11 @@ def _track_with_mediapipe(clip_path, target_ratio):
                 break # Ketemu satu posisi, langsung kunci dan keluar scan
             f_idx += 1
             
-    # 2. Reset video ke awal untuk persiapan rendering
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    # 2. Reset video to range start for preparation
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
     
     # 3. Isi semua frame dengan koordinat YANG SAMA (Diam total)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    total_frames = end_frame - start_frame
     print(f"[Reframer] Applying Super-Static Lock to all {total_frames} frames.")
     
     if crop_w > width:
@@ -329,14 +356,14 @@ def _track_with_mediapipe(clip_path, target_ratio):
     else:
         crop_x = max(0, min(int(best_overall_cx) - crop_w // 2, width - crop_w))
     
-    for i in range(total_frames):
+    for i in range(start_frame, end_frame):
         positions.append({'frame': i, 'x': crop_x, 'w': crop_w})
 
     cap.release()
     return positions
 
 
-def _apply_crop(clip_path, output_path, positions, target_ratio, progress_callback=None, base_pct=40, auto_background_enabled=True):
+def _apply_crop(clip_path, output_path, positions, target_ratio, progress_callback=None, base_pct=40, auto_background_enabled=True, start_frame=0, end_frame=0):
     """Apply crop positions using OpenCV for processing, GPU FFmpeg for encoding."""
     video_enc = get_ffmpeg_video_encode_args()
 
@@ -344,7 +371,8 @@ def _apply_crop(clip_path, output_path, positions, target_ratio, progress_callba
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    total_frames = end_frame - start_frame
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
     if not positions:
         print("[Reframer] No positions provided, using default center crop.")
@@ -390,6 +418,7 @@ def _apply_crop(clip_path, output_path, positions, target_ratio, progress_callba
         '-pix_fmt', 'bgr24',
         '-r', str(fps),
         '-i', '-',          # Input 0: stdin (cropped video stream)
+        '-ss', str(start_frame / fps),
         '-i', clip_path,    # Input 1: original clip (for audio)
         '-map', '0:v',
         '-map', '1:a',
@@ -405,7 +434,7 @@ def _apply_crop(clip_path, output_path, positions, target_ratio, progress_callba
     process = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     frame_idx = 0
-    while True:
+    while frame_idx < total_frames:
         ret, frame = cap.read()
         if not ret:
             break
