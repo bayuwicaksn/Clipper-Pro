@@ -221,7 +221,8 @@ class Pipeline:
             return {
                 "video_path": current_path,
                 "status": "ready_for_captions",
-                "export_path": os.path.join(exports_dir, f"{clip_name}_final.mp4")
+                "export_path": os.path.join(exports_dir, f"{clip_name}_final.mp4"),
+                "clip_name": clip_name
             }
 
         # â”€â”€â”€ Step 2: Hook intro (optional TTS + blurred intro) â”€â”€â”€

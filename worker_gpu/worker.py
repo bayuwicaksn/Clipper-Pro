@@ -260,6 +260,10 @@ def process_export_job(job_data: dict) -> None:
         # Update status to mark it's waiting for Node worker
         update_job_db(export_id, {"status": "awaiting_captions", "status_message": "Queuing captions..."})
         
+        # Update clip metadata with the unique filename so Node worker can find it
+        if result.get("clip_name"):
+            clip_metadata["filename"] = f"{result['clip_name']}.mp4"
+
         delegated = publish_to_caption_worker(
             job_id=export_id, # Use export_id so it updates the specific export entry
             job_dir=job_dir,
