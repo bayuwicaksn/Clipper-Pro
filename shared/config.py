@@ -1,36 +1,74 @@
+"""
+Shared application settings — read from environment variables / .env file.
+Used by backend, worker_gpu, and worker_node.
+"""
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
-import os
+from typing import Optional
+
 
 class Settings(BaseSettings):
-    # App Settings
+    # ── App ───────────────────────────────────────────────────────────────
+    ENVIRONMENT: str = "development"
+    LOG_LEVEL: str = "INFO"
     CLIPPER_WORKSPACE: str = "workspace"
-    
-    # Database Settings (Supports Supabase/Postgres via DATABASE_URL env)
-    # Default to local sqlite for development
-    DATABASE_URL: str = "sqlite:///clipper.db"
-    
     DEBUG: bool = False
-    PORT: int = 5000
+    PORT: int = 8000
     HOST: str = "0.0.0.0"
     CORS_ORIGINS: str = ""
 
-    # API Keys & Secrets
-    GEMINI_API_KEY: str = ""
+    # ── Database ──────────────────────────────────────────────────────────
+    # Supports SQLite (local dev) and PostgreSQL (production via Supabase)
+    DATABASE_URL: str = "sqlite:///clipper.db"
+
+    # ── API Keys ──────────────────────────────────────────────────────────
     OPENAI_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+
+    # ── Supabase ──────────────────────────────────────────────────────────
     SUPABASE_URL: str = ""
     SUPABASE_KEY: str = ""
-    
-    # Pub/Sub Topics
+
+    # ── GCP / Pub/Sub ─────────────────────────────────────────────────────
     GCP_PROJECT_ID: str = ""
+    GCS_BUCKET: str = ""
+
     PUBSUB_TOPIC_JOBS: str = "clipper-jobs"
     PUBSUB_TOPIC_CAPTION: str = "clipper-caption-jobs"
+    PUBSUB_SUBSCRIPTION_JOBS: str = "clipper-jobs-sub"
+    PUBSUB_SUBSCRIPTION_CAPTION: str = "clipper-caption-jobs-sub"
 
-    # Pydantic Settings Configuration
+    # ── Worker / GPU ──────────────────────────────────────────────────────
+    WHISPER_MODEL: str = "medium"
+    GPU_ENABLED: bool = False
+
+    # ── Storage behaviour ─────────────────────────────────────────────────
+    # When True and GCS_BUCKET is set, processed files are uploaded to GCS
+    # and served via signed URLs. Set False for pure local/dev mode.
+    USE_GCS: bool = False
+
+    # Signed URL expiry in seconds (default 1 hour)
+    GCS_SIGNED_URL_EXPIRY: int = 3600
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore"
+        extra="ignore",
     )
 
-# Create an instance of the settings
+    # ── Derived helpers ───────────────────────────────────────────────────
+    @property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT.lower() == "production"
+
+    @property
+    def gcs_enabled(self) -> bool:
+        return bool(self.USE_GCS and self.GCS_BUCKET and self.GCP_PROJECT_ID)
+
+    @property
+    def pubsub_enabled(self) -> bool:
+        return bool(self.GCP_PROJECT_ID)
+
+
+# Singleton instance used everywhere
 settings = Settings()
