@@ -130,15 +130,97 @@ def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None,
     else:
         crop_positions = _track_with_opencv(clip_path, target_ratio, start_frame, end_frame)
 
+    # --- OPTIMIZATION: Check if positions are static ---
+    is_static = False
+    if len(crop_positions) > 0:
+        first = crop_positions[0]
+        is_static = all(
+            p.get('x') == first.get('x') and 
+            p.get('y', 0) == first.get('y', 0) and 
+            p.get('w') == first.get('w') and 
+            p.get('h', first.get('h')) == first.get('h', first.get('h'))
+            for p in crop_positions
+        )
+
     if progress_callback:
         base = 40 + int((clip_index / total_clips) * 10)
         progress_callback('reframe', f'Reframing clip {clip_index+1}/{total_clips}...', base)
     else:
         base = 40
 
-    _apply_crop(clip_path, output_path, crop_positions, target_ratio, progress_callback, base, 
-                auto_background_enabled=auto_background_enabled, 
-                start_frame=start_frame, end_frame=end_frame)
+    if is_static:
+        print(f"[Reframer] Static framing detected. Using Pure FFmpeg Fast-Path.")
+        _apply_crop_ffmpeg(clip_path, output_path, crop_positions, target_ratio,
+                           start_frame=start_frame, end_frame=end_frame,
+                           auto_background_enabled=auto_background_enabled)
+    else:
+        _apply_crop(clip_path, output_path, crop_positions, target_ratio, progress_callback, base, 
+                    auto_background_enabled=auto_background_enabled, 
+                    start_frame=start_frame, end_frame=end_frame)
+
+
+def _apply_crop_ffmpeg(clip_path, output_path, positions, target_ratio,
+                        start_frame=0, end_frame=0, auto_background_enabled=True):
+    """
+    Pure FFmpeg crop â€” significantly faster than Python frame loop.
+    Optimized for static positions.
+    """
+    video_enc = get_ffmpeg_video_encode_args()
+    
+    cap = cv2.VideoCapture(clip_path)
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    cap.release()
+    
+    # Use first position for static crop (guaranteed static by caller)
+    pos = positions[0] if positions else {'x': 0, 'y': 0, 'w': 1080, 'h': 1920}
+    
+    # --- CLAMPING: Ensure coordinates are within video bounds for FFmpeg ---
+    cw = min(int(pos.get('w', 1080)), width)
+    ch = min(int(pos.get('h', 1920)), height)
+    crop_x = max(0, min(int(pos.get('x', 0)), width - cw))
+    crop_y = max(0, min(int(pos.get('y', 0)), height - ch))
+    
+    # Output resolution logic consistent with _apply_crop
+    if target_ratio < 1: # Portrait
+        out_w, out_h = 1080, 1920
+    elif target_ratio > 1: # Landscape
+        out_w, out_h = 1920, 1080
+    else: # Square
+        out_w, out_h = 1080, 1080
+    
+    start_sec = start_frame / fps
+    duration = (end_frame - start_frame) / fps
+    
+    if auto_background_enabled:
+        # Blurred background logic with FFmpeg
+        # boxblur is typically faster than gblur
+        vf = (
+            f"split=2[main][bg];"
+            f"[bg]crop={cw}:{ch}:{crop_x}:{crop_y},scale={out_w}:{out_h},boxblur=20:10,eq=brightness=-0.3[blurred];"
+            f"[main]crop={cw}:{ch}:{crop_x}:{crop_y},scale={out_w}:{out_h}[cropped];"
+            f"[blurred][cropped]overlay=(W-w)/2:(H-h)/2"
+        )
+    else:
+        vf = f"crop={cw}:{ch}:{crop_x}:{crop_y},scale={out_w}:{out_h}"
+    
+    cmd = [
+        'ffmpeg', '-y',
+        '-ss', f"{start_sec:.4f}",
+        '-t', f"{duration:.4f}",
+        '-i', clip_path,
+        '-vf', vf,
+    ] + video_enc + [
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-movflags', '+faststart',
+        output_path
+    ]
+    
+    print(f"[Reframer] Starting Fast-Path (Pure FFmpeg) Encode: {' '.join(cmd)}")
+    subprocess.run(cmd, check=True)
+
 
 
 def _track_with_override(clip_path, custom_crop_x_pct, target_ratio, start_frame, end_frame):
