@@ -3,14 +3,11 @@ import cv2
 import numpy as np
 from ..gpu_utils import get_ffmpeg_video_encode_args
 
-def _apply_crop(clip_path, output_path, positions, target_ratio, progress_callback=None, base_pct=40, auto_background_enabled=True, start_frame=0, end_frame=0):
+def _apply_crop(clip_path, output_path, positions, target_ratio, width, height, fps, progress_callback=None, base_pct=40, auto_background_enabled=True, start_frame=0, end_frame=0):
     """Apply crop positions using OpenCV for processing, GPU FFmpeg for encoding."""
     video_enc = get_ffmpeg_video_encode_args()
 
     cap = cv2.VideoCapture(clip_path)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS)
     total_frames = end_frame - start_frame
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 

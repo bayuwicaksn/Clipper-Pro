@@ -1,4 +1,3 @@
-import os
 import cv2
 from .tracking import (
     _track_with_segments, 
@@ -24,8 +23,10 @@ def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None,
     except Exception:
         target_ratio = 9/16  # Default fallback
         
-    # Calculate frame range
+    # Calculate frame range & Fetch metadata once
     cap_temp = cv2.VideoCapture(clip_path)
+    width = int(cap_temp.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap_temp.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap_temp.get(cv2.CAP_PROP_FPS) or 30.0
     total_source_frames = int(cap_temp.get(cv2.CAP_PROP_FRAME_COUNT))
     cap_temp.release()
@@ -40,7 +41,7 @@ def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None,
     if segments:
         crop_positions = _track_with_segments(clip_path, segments, target_ratio, start_frame, end_frame)
     elif custom_crop_x is not None:
-        crop_positions = _track_with_override(clip_path, custom_crop_x, target_ratio, start_frame, end_frame)
+        crop_positions = _track_with_override(width, height, custom_crop_x, target_ratio, start_frame, end_frame)
     elif mode == 'mediapipe' or mode == 'yolo':
         crop_positions = _track_with_mediapipe(clip_path, target_ratio, start_frame, end_frame)
     else:
@@ -66,10 +67,10 @@ def reframe_clip(clip_path, output_path, mode='opencv', progress_callback=None,
 
     if is_static:
         print(f"[Reframer] Static framing detected. Using Pure FFmpeg Fast-Path.")
-        _apply_crop_ffmpeg(clip_path, output_path, crop_positions, target_ratio,
+        _apply_crop_ffmpeg(clip_path, output_path, crop_positions, target_ratio, width, height, fps,
                            start_frame=start_frame, end_frame=end_frame,
                            auto_background_enabled=auto_background_enabled)
     else:
-        _apply_crop(clip_path, output_path, crop_positions, target_ratio, progress_callback, base, 
+        _apply_crop(clip_path, output_path, crop_positions, target_ratio, width, height, fps, progress_callback, base, 
                     auto_background_enabled=auto_background_enabled, 
                     start_frame=start_frame, end_frame=end_frame)

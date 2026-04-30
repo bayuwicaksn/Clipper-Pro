@@ -1,4 +1,4 @@
-﻿"""
+"""
 GPU Utilities â€” Detect NVIDIA GPU and provide FFmpeg/OpenCV GPU-accelerated options
 """
 
@@ -115,13 +115,8 @@ def get_ffmpeg_hwaccel_input_args():
     Returns list of args to prepend BEFORE -i input.
     """
     if has_nvidia_gpu():
-        encoders = get_ffmpeg_encoders()
-        
-        # If true native standard nvdec is available
-        if 'h264_nvenc' in encoders:
-            return ['-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda']
-            
-        # Standard Windows hardware decoding fallback (uses GTX 1050 Ti chips without requiring extra SDKs)
+        # d3d11va is generally the most stable and efficient for 'copy-back' on Windows
+        # where we still need to run CPU filters (like boxblur/overlay).
         return ['-hwaccel', 'd3d11va']
         
     return []

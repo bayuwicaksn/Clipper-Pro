@@ -1,7 +1,5 @@
 import os
 import cv2
-import numpy as np
-import math
 from .utils import _find_face_center
 
 # MediaPipe Import Logic
@@ -70,14 +68,8 @@ def get_face_center_x(clip_path, timestamp_sec):
     cap.release()
     return 0.5
 
-def _track_with_override(clip_path, custom_crop_x_pct, target_ratio, start_frame, end_frame):
+def _track_with_override(width, height, custom_crop_x_pct, target_ratio, start_frame, end_frame):
     """Static framing using a user-provided percentage override (0.0 to 1.0)"""
-    cap = cv2.VideoCapture(clip_path)
-    if not cap.isOpened(): return []
-
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    
     crop_w = int(height * target_ratio)
     
     center_x = width * custom_crop_x_pct
@@ -92,7 +84,6 @@ def _track_with_override(clip_path, custom_crop_x_pct, target_ratio, start_frame
     for i in range(start_frame, end_frame):
         positions.append({'frame': i, 'x': crop_x, 'w': crop_w})
     
-    cap.release()
     return positions
 
 def _track_with_opencv(clip_path, target_ratio, start_frame, end_frame):

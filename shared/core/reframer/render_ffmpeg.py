@@ -1,20 +1,15 @@
 import subprocess
 import cv2
-from ..gpu_utils import get_ffmpeg_video_encode_args
+from ..gpu_utils import get_ffmpeg_video_encode_args, get_ffmpeg_hwaccel_input_args
 
-def _apply_crop_ffmpeg(clip_path, output_path, positions, target_ratio,
+def _apply_crop_ffmpeg(clip_path, output_path, positions, target_ratio, width, height, fps,
                         start_frame=0, end_frame=0, auto_background_enabled=True):
     """
     Pure FFmpeg crop â€” significantly faster than Python frame loop.
     Optimized for static positions.
     """
     video_enc = get_ffmpeg_video_encode_args()
-    
-    cap = cv2.VideoCapture(clip_path)
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    cap.release()
+    hwaccel_args = get_ffmpeg_hwaccel_input_args()
     
     # Use first position for static crop (guaranteed static by caller)
     pos = positions[0] if positions else {'x': 0, 'y': 0, 'w': 1080, 'h': 1920}
@@ -49,6 +44,7 @@ def _apply_crop_ffmpeg(clip_path, output_path, positions, target_ratio,
     
     cmd = [
         'ffmpeg', '-y',
+    ] + hwaccel_args + [
         '-ss', f"{start_sec:.4f}",
         '-t', f"{duration:.4f}",
         '-i', clip_path,
