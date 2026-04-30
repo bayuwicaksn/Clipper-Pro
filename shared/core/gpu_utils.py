@@ -115,9 +115,9 @@ def get_ffmpeg_hwaccel_input_args():
     Returns list of args to prepend BEFORE -i input.
     """
     if has_nvidia_gpu():
-        # d3d11va is generally the most stable and efficient for 'copy-back' on Windows
-        # where we still need to run CPU filters (like boxblur/overlay).
-        return ['-hwaccel', 'd3d11va']
+        # Using 'auto' is safest for Windows as it will pick d3d11va or cuda 
+        # while keeping frames compatible with standard software filters (crop, scale, boxblur).
+        return ['-hwaccel', 'auto']
         
     return []
 
