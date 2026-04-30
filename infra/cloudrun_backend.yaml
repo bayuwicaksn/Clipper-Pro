@@ -4,8 +4,20 @@ metadata:
   name: clipper-backend
 spec:
   template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/sessionAffinity: "true" # Better for SSE
     spec:
+      containerConcurrency: 80
       containers:
         - image: BACKEND_IMAGE
+          resources:
+            limits:
+              cpu: "1"
+              memory: "2Gi"
           ports:
-            - containerPort: 8000
+            - containerPort: 8080
+          env:
+            - name: ENVIRONMENT
+              value: "production"

@@ -75,6 +75,10 @@ def process_caption_job(job_data: dict) -> None:
     Render captions and composite them for all clips in a job.
     """
     job_id = job_data.get("job_id")
+    
+    from shared.utils.logging_utils import set_correlation_id
+    set_correlation_id(job_id)
+
     job_dir = job_data.get("job_dir")
     clips = job_data.get("clips", [])
     config = job_data.get("config", {})
@@ -88,9 +92,16 @@ def process_caption_job(job_data: dict) -> None:
         from sqlmodel import Session
         with Session(engine) as session:
             existing_job = crud.get_job(session, job_id)
-            if existing_job and existing_job.status in ["completed", "error"]:
-                logger.info(f"[{job_id}] Skipping captioning as it is already in '{existing_job.status}' state.")
-                return
+            if existing_job:
+                if existing_job.status in ["completed", "error"]:
+                    logger.info(f"[{job_id}] Skipping captioning: job is already '{existing_job.status}'.")
+                    return
+                if existing_job.status == "processing":
+                    from datetime import datetime, timedelta
+                    if existing_job.updated_at and existing_job.updated_at > datetime.now() - timedelta(minutes=5):
+                        logger.warning(f"[{job_id}] Skipping: job is already being processed (updated recently).")
+                        return
+                    logger.info(f"[{job_id}] Job is 'processing' but stale. Re-taking ownership.")
     except Exception as e:
         logger.warning(f"[{job_id}] Could not verify job status in DB: {e}")
 
@@ -105,7 +116,13 @@ def process_caption_job(job_data: dict) -> None:
 
         try:
             clip_index = clip.get("clip_index", i)
-            logger.info(f"[{job_id}] Rendering captions for Clip {clip_index+1}/{len(clips)}")
+            msg = f"Rendering captions for Clip {clip_index+1}/{len(clips)}"
+            logger.info(f"[{job_id}] {msg}")
+            update_job_db(job_id, {
+                "status": "processing",
+                "progress": int(((i) / len(clips)) * 100),
+                "status_message": msg
+            })
             
             clip_folder = os.path.join(job_dir, 'clips', f'clip_{clip_index + 1:02d}')
             exports_dir = os.path.join(clip_folder, 'exports')
@@ -200,6 +217,8 @@ def process_caption_job(job_data: dict) -> None:
     if not shutdown_event.is_set():
         update_job_db(job_id, {
             "status": "completed",
+            "progress": 100,
+            "status_message": "All captions rendered",
             "clips": json.dumps(final_clips_metadata)
         })
         logger.info(f"[{job_id}] Worker Node finished and updated DB to 'completed'.")
@@ -263,8 +282,13 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
 
+    # Setup Structured Logging
+    from shared.utils.logging_utils import setup_structured_logging
+    setup_structured_logging()
+
     health_thread = threading.Thread(target=start_health_server, daemon=True)
     health_thread.start()
 
+    logger.info("Node Worker starting listeners...")
     pull_messages()
     logger.info("Worker Node process exited cleanly.")

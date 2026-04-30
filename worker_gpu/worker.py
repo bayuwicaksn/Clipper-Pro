@@ -67,6 +67,9 @@ def process_job(job_data: dict) -> None:
     job_id = job_data.get("job_id")
     config = job_data.get("config", {})
     
+    from shared.utils.logging_utils import set_correlation_id
+    set_correlation_id(job_id)
+    
     if not job_id:
         logger.error("Job data missing job_id")
         return
@@ -77,9 +80,17 @@ def process_job(job_data: dict) -> None:
     try:
         with Session(engine) as session:
             existing_job = crud.get_job(session, job_id)
-            if existing_job and existing_job.status in ["completed", "error"]:
-                logger.info(f"[{job_id}] Skipping analysis as it is already in '{existing_job.status}' state.")
-                return
+            if existing_job:
+                if existing_job.status in ["completed", "error"]:
+                    logger.info(f"[{job_id}] Skipping analysis: job is already '{existing_job.status}'.")
+                    return
+                if existing_job.status == "processing":
+                    # If it was updated very recently, assume another worker is active
+                    from datetime import datetime, timedelta
+                    if existing_job.updated_at and existing_job.updated_at > datetime.now() - timedelta(minutes=5):
+                        logger.warning(f"[{job_id}] Skipping: job is already being processed by another worker (updated recently).")
+                        return
+                    logger.info(f"[{job_id}] Job is 'processing' but stale. Re-taking ownership.")
     except Exception as e:
         logger.warning(f"[{job_id}] Could not verify job status in DB: {e}")
 
@@ -98,7 +109,7 @@ def process_job(job_data: dict) -> None:
             update_job_db(job_id, {
                 "status": "processing",
                 "progress": progress,
-                "error": f"{step}: {message}"
+                "status_message": f"{step}: {message}"
             })
 
         # 3. Run Pipeline Initial Steps
@@ -114,12 +125,13 @@ def process_job(job_data: dict) -> None:
         update_job_db(job_id, {
             "status": "completed",
             "clips": json.dumps(clips_metadata),
-            "error": None 
+            "status_message": "Analysis complete",
+            "error_message": None 
         })
 
     except Exception as e:
         logger.error(f"[{job_id}] Pipeline failed: {e}", exc_info=True)
-        update_job_db(job_id, {"status": "error", "error": str(e)})
+        update_job_db(job_id, {"status": "error", "error_message": str(e)})
 
 
 def publish_to_caption_worker(job_id: str, job_dir: str, clips: list, config: dict):
@@ -153,6 +165,10 @@ def publish_to_caption_worker(job_id: str, job_dir: str, clips: list, config: di
 def process_export_job(job_data: dict) -> None:
     """Handle targeted clip export (FFmpeg rendering)."""
     job_id = job_data.get("job_id")
+    
+    from shared.utils.logging_utils import set_correlation_id
+    set_correlation_id(f"export_{job_id}")
+
     job_dir = job_data.get("job_dir")
     clip_metadata = job_data.get("clip_metadata")
     config = job_data.get("export_config", {})
@@ -163,9 +179,16 @@ def process_export_job(job_data: dict) -> None:
     try:
         with Session(engine) as session:
             existing_job = crud.get_job(session, export_id)
-            if existing_job and existing_job.status in ["completed", "error"]:
-                logger.info(f"[{export_id}] Skipping job as it is already in '{existing_job.status}' state.")
-                return
+            if existing_job:
+                if existing_job.status in ["completed", "error"]:
+                    logger.info(f"[{export_id}] Skipping export: job is already '{existing_job.status}'.")
+                    return
+                if existing_job.status == "processing":
+                    from datetime import datetime, timedelta
+                    if existing_job.updated_at and existing_job.updated_at > datetime.now() - timedelta(minutes=5):
+                        logger.warning(f"[{export_id}] Skipping: export is already being processed (updated recently).")
+                        return
+                    logger.info(f"[{export_id}] Export is 'processing' but stale. Re-taking ownership.")
     except Exception as e:
         logger.warning(f"[{export_id}] Could not verify job status in DB: {e}")
 
@@ -178,7 +201,7 @@ def process_export_job(job_data: dict) -> None:
             update_job_db(export_id, {
                 "status": "processing",
                 "progress": progress,
-                "error": f"{step}: {message}"
+                "status_message": f"{step}: {message}"
             })
         
         pipeline = Pipeline(job_dir, config, progress_callback)
@@ -227,7 +250,7 @@ def process_export_job(job_data: dict) -> None:
                 shutil.move(result["video_path"], final_path)
                 logger.info(f"[{export_id}] Moved reframed video to final path: {final_path}")
             
-            update_job_db(export_id, {"status": "completed", "error": None})
+            update_job_db(export_id, {"status": "completed", "status_message": "Export complete", "error_message": None})
             return
 
         # ── Step 3: Delegate Visuals (Captions) to Node Worker ──
@@ -247,7 +270,7 @@ def process_export_job(job_data: dict) -> None:
                 clip_metadata.get("clip_index", 0), 1, 
                 config.get("aspect_ratio", "9:16")
             )
-            update_job_db(export_id, {"status": "completed", "error": None})
+            update_job_db(export_id, {"status": "completed", "status_message": "Export complete (fallback)", "error_message": None})
             logger.info(f"[{export_id}] Export complete (via local fallback)!")
         else:
             logger.info(f"[{export_id}] Handed off to Node worker. Waiting for completion...")
@@ -255,7 +278,7 @@ def process_export_job(job_data: dict) -> None:
 
     except Exception as e:
         logger.error(f"[{export_id}] Export process failed: {e}", exc_info=True)
-        update_job_db(export_id, {"status": "error", "error": str(e)})
+        update_job_db(export_id, {"status": "error", "error_message": str(e)})
 
 
 # ── Pub/Sub Listener ──────────────────────────────────────────────────
@@ -328,8 +351,25 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
 
+    # 0. Setup Structured Logging
+    from shared.utils.logging_utils import setup_structured_logging
+    setup_structured_logging()
+
+    # 1. GPU Diagnostics
+    from shared.core.gpu_utils import run_gpu_diagnostics
+    success, results = run_gpu_diagnostics()
+    
+    if not success:
+        if os.getenv("STRICT_GPU_CHECK", "false").lower() == "true":
+            import sys
+            logger.error("CRITICAL: GPU Diagnostics failed and STRICT_GPU_CHECK is enabled. Exiting.")
+            sys.exit(1)
+        else:
+            logger.warning("GPU Diagnostics failed. Continuing in compatibility mode (CPU fallback).")
+
     health_thread = threading.Thread(target=start_health_server, daemon=True)
     health_thread.start()
 
+    logger.info("GPU Worker starting listeners...")
     start_listeners()
     logger.info("Worker process exited cleanly.")

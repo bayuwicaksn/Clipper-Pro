@@ -25,6 +25,7 @@ from . import (
     timestamp_to_seconds, filter_words_by_range
 )
 from shared.db import crud
+from shared.pubsub import Publisher # NEW
 from backend.db.database import get_session, engine
 from .schemas import ProcessRequest, ExportRequest, ReprocessRequest, JobResponse
 from ..services import job_service
@@ -56,23 +57,22 @@ async def start_processing(data: ProcessRequest, session: Session = Depends(get_
 
     if project_id:
         try:
-            from google.cloud import pubsub_v1
-            publisher = pubsub_v1.PublisherClient()
-            topic_path = publisher.topic_path(project_id, topic_id)
-            
-            message_data = json.dumps({
+            pub = Publisher(project_id)
+            payload = {
                 "job_id": job_id,
                 "config": config,
                 "timestamp": time.time()
-            }).encode("utf-8")
+            }
             
-            publisher.publish(topic_path, message_data).result(timeout=30)
+            success = pub.publish(topic_id, payload)
+            if not success:
+                raise Exception("Publisher failed after retries")
+            
             logger.info(f"[Pub/Sub] Published job {job_id} to {topic_id}")
         except Exception as e:
             logger.error(f"[Pub/Sub] Failed to publish: {e}")
-            # Fallback or error based on preference
             if os.getenv("ENVIRONMENT") == "production":
-                crud.update_job_status(session, job_id, 'error', error=f"Pub/Sub Error: {str(e)}")
+                crud.update_job_status(session, job_id, 'error', error_message=f"Pub/Sub Error: {str(e)}")
                 raise HTTPException(status_code=500, detail=f"Failed to queue job: {e}")
     
     else:
@@ -154,6 +154,9 @@ async def get_status(job_id: str, session: Session = Depends(get_session)):
     return {
         'id': job.id,
         'status': job.status,
+        'progress': job.progress,
+        'status_message': job.status_message,
+        'error_message': job.error_message,
         'config': safe_json(job.config),
         'created_at': job.created_at.isoformat() if hasattr(job.created_at, 'isoformat') else str(job.created_at),
         'clips': safe_json(job.clips) or [],
@@ -185,18 +188,31 @@ async def stream_progress(job_id: str):
                     job = crud.get_job(session, job_id)
                     if job:
                         if job.status == 'completed':
-                            yield 'data: ' + json.dumps({'step': 'done', 'message': 'Job completed!', 'progress': 100}) + '\n\n'
+                            yield 'data: ' + json.dumps({
+                                'step': 'done', 
+                                'message': job.status_message or 'Job completed!', 
+                                'progress': 100,
+                                'status_message': job.status_message
+                            }) + '\n\n'
                             break
                         elif job.status == 'error':
-                            yield 'data: ' + json.dumps({'step': 'error', 'message': job.error or 'Job failed', 'progress': 0}) + '\n\n'
+                            yield 'data: ' + json.dumps({
+                                'step': 'error', 
+                                'message': job.error_message or 'Job failed', 
+                                'progress': 0,
+                                'error_message': job.error_message
+                            }) + '\n\n'
                             break
                         elif job.status == 'processing':
                             yield 'data: ' + json.dumps({
                                 'step': 'processing',
-                                'message': job.error or 'Processing...',
-                                'progress': getattr(job, 'progress', 0)
+                                'message': job.status_message or 'Processing...',
+                                'progress': job.progress,
+                                'status_message': job.status_message
                             }) + '\n\n'
                 
+                # 3. Heartbeat (Ping) to keep connection alive
+                yield ': ping\n\n'
                 await asyncio.sleep(2)
 
     return StreamingResponse(
@@ -285,7 +301,7 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
         if existing_job:
             crud.update_job(session, export_id, {
                 "status": "queued",
-                "error": None,
+                "error_message": None,
                 "updated_at": datetime.now()
             })
             logger.info(f"[EXPORT] Reset existing job record for retry: {export_id}")
@@ -303,12 +319,8 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
 
     if project_id:
         try:
-            from google.cloud import pubsub_v1
-            publisher = pubsub_v1.PublisherClient()
-            topic_path = publisher.topic_path(project_id, topic_id)
-            
-            # Prepare export data
-            export_data = {
+            pub = Publisher(project_id)
+            export_payload = {
                 "job_id": job_id,
                 "job_dir": job_dir,
                 "clip_metadata": clip_metadata,
@@ -316,7 +328,10 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
                 "timestamp": time.time()
             }
 
-            publisher.publish(topic_path, json.dumps(export_data).encode("utf-8")).result(timeout=30)
+            success = pub.publish(topic_id, export_payload)
+            if not success:
+                raise Exception("Export Publisher failed after retries")
+                
             logger.info(f"[Pub/Sub] Export job for {job_id} sent to {topic_id}")
             return {"export_id": export_id, "status": "queued"}
         except Exception as e:

@@ -1,4 +1,4 @@
-﻿from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -57,8 +57,11 @@ class ClipResponse(BaseModel):
 class JobResponse(BaseModel):
     id: str
     status: str
+    progress: int = 0
+    status_message: Optional[str] = None
+    error_message: Optional[str] = None
     created_at: datetime
-    error: Optional[str] = None
+    error: Optional[str] = None  # Deprecated alias
     clips: List[Dict[str, Any]] = []
     config: Optional[Dict[str, Any]] = None
 

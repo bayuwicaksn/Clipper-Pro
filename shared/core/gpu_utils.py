@@ -4,6 +4,7 @@ GPU Utilities â€” Detect NVIDIA GPU and provide FFmpeg/OpenCV GPU-accelerat
 
 import subprocess
 import shutil
+import os
 
 # Cache GPU detection result
 _gpu_available = None
@@ -115,9 +116,9 @@ def get_ffmpeg_hwaccel_input_args():
     Returns list of args to prepend BEFORE -i input.
     """
     if has_nvidia_gpu():
-        # Using 'auto' is safest for Windows as it will pick d3d11va or cuda 
-        # while keeping frames compatible with standard software filters (crop, scale, boxblur).
-        return ['-hwaccel', 'auto']
+        # Using 'cuda' is more specific for NVIDIA and often more stable than 'auto'
+        # which might pick 'd3d11va' and crash on some Windows environments.
+        return ['-hwaccel', 'cuda']
         
     return []
 
@@ -142,3 +143,64 @@ def print_gpu_info():
             print(f'[GPU] Info: {info}')
             return info
     return 'No GPU'
+
+
+def run_gpu_diagnostics():
+    """
+    Perform a full GPU health check. 
+    Returns (success, results_dict)
+    """
+    results = {
+        "nvidia_gpu": has_nvidia_gpu(),
+        "torch_cuda": False,
+        "ffmpeg_nvenc": False,
+        "ffmpeg_smoke_test": False
+    }
+
+    print("\n--- GPU Startup Diagnostics ---")
+    
+    # 1. Basic NVIDIA Check
+    if results["nvidia_gpu"]:
+        print("âœ… NVIDIA Hardware Detected")
+        print_gpu_info()
+    else:
+        print("â Œ No NVIDIA Hardware found")
+
+    # 2. PyTorch CUDA Check
+    try:
+        import torch
+        results["torch_cuda"] = torch.cuda.is_available()
+        if results["torch_cuda"]:
+            print(f"âœ… PyTorch CUDA: Available (Device: {torch.cuda.get_device_name(0)})")
+        else:
+            print("âš ï¸  PyTorch CUDA: NOT AVAILABLE (Whisper will run on CPU)")
+    except ImportError:
+        print("â Œ PyTorch: Not installed")
+
+    # 3. FFmpeg Encoder Check
+    encoders = get_ffmpeg_encoders()
+    results["ffmpeg_nvenc"] = 'h264_nvenc' in encoders
+    if results["ffmpeg_nvenc"]:
+        print("âœ… FFmpeg: h264_nvenc available")
+    else:
+        print("âš ï¸  FFmpeg: h264_nvenc NOT found (Hardware encoding disabled)")
+
+    # 4. Smoke Test (FFmpeg encode small black frame)
+    if results["ffmpeg_nvenc"]:
+        print("Running FFmpeg smoke test...")
+        try:
+            # Create a 1-second black video using the selected encoder
+            encode_args = get_ffmpeg_video_encode_args()
+            test_cmd = [
+                'ffmpeg', '-y', '-f', 'lavfi', '-i', 'color=c=black:s=128x128:d=1',
+                *encode_args, '-f', 'mp4', 'null' if os.name == 'nt' else '/dev/null'
+            ]
+            subprocess.run(test_cmd, check=True, capture_output=True, timeout=10)
+            results["ffmpeg_smoke_test"] = True
+            print("âœ… FFmpeg Smoke Test: SUCCESS")
+        except Exception as e:
+            print(f"â Œ FFmpeg Smoke Test: FAILED ({e})")
+            results["ffmpeg_smoke_test"] = False
+    
+    print("-------------------------------\n")
+    return all([results["nvidia_gpu"], results["torch_cuda"], results["ffmpeg_smoke_test"]]), results

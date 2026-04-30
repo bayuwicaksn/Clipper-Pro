@@ -16,6 +16,10 @@ from .api.ai import router as ai_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize Structured Logging
+    from shared.utils.logging_utils import setup_structured_logging
+    setup_structured_logging()
+    
     # Initialize Database
     create_db_and_tables()
     yield

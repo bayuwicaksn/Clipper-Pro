@@ -1,4 +1,4 @@
-﻿import os
+import os
 import json
 from sqlmodel import Session
 from backend.db.database import engine
@@ -22,7 +22,7 @@ def start_job(job_id: str, job_dir: str, config: dict, progress_callback: callab
             crud.update_job_clips(session, job_id, clips)
             progress_callback('done', f'Completed! Generated {len(clips)} clips.', 100)
         except Exception as e:
-            crud.update_job_status(session, job_id, 'error', error=str(e))
+            crud.update_job_status(session, job_id, 'error', error_message=str(e))
             progress_callback('error', str(e), 0)
 
 def start_export(
@@ -74,5 +74,5 @@ def start_export(
             progress_callback('done', 'Export finished.', 100)
             
         except Exception as e:
-            crud.update_job_status(session, export_id, 'error', error=str(e))
+            crud.update_job_status(session, export_id, 'error', error_message=str(e))
             progress_callback('error', str(e), 0)

@@ -71,10 +71,11 @@ def update_job_status(
     session: Session,
     job_id: str,
     status: str,
-    error: Optional[str] = None,
+    status_message: Optional[str] = "KEEP_EXISTING",
+    error_message: Optional[str] = "KEEP_EXISTING",
 ) -> Optional[Job]:
     """
-    Set the job status (and optionally an error message).
+    Set the job status (and optionally informative messages).
     Returns the updated Job or None if not found.
     """
     job = get_job(session, job_id)
@@ -83,8 +84,10 @@ def update_job_status(
         return None
 
     job.status = status
-    if error is not None:
-        job.error = str(error)[:4096]   # cap length to avoid DB overflow
+    if status_message != "KEEP_EXISTING":
+        job.status_message = str(status_message)[:4096] if status_message is not None else None
+    if error_message != "KEEP_EXISTING":
+        job.error_message = str(error_message)[:4096] if error_message is not None else None
 
     _touch(job)
     session.add(job)

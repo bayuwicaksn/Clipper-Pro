@@ -4,9 +4,20 @@ metadata:
   name: clipper-worker-node
 spec:
   template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
     spec:
-      containerConcurrency: 1
+      containerConcurrency: 1 # Node worker handles 1 render at a time to be safe
+      timeoutSeconds: 3600
       containers:
         - image: WORKER_NODE_IMAGE
+          resources:
+            limits:
+              cpu: "2"
+              memory: "4Gi"
           ports:
             - containerPort: 8080
+          env:
+            - name: ENVIRONMENT
+              value: "production"

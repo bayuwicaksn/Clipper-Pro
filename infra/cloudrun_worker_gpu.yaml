@@ -2,11 +2,29 @@ apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
   name: clipper-worker-gpu
+  annotations:
+    run.googleapis.com/launch-stage: BETA
 spec:
   template:
+    metadata:
+      annotations:
+        run.googleapis.com/execution-environment: gen2
+        run.googleapis.com/nvidia-gpus: "1"
+        run.googleapis.com/cpu-throttling: "false"
     spec:
       containerConcurrency: 1
+      timeoutSeconds: 3600
       containers:
         - image: WORKER_GPU_IMAGE
+          resources:
+            limits:
+              cpu: "4"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
           ports:
             - containerPort: 8080
+          env:
+            - name: ENVIRONMENT
+              value: "production"
+            - name: STRICT_GPU_CHECK
+              value: "true"
