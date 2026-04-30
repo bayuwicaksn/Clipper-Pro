@@ -96,16 +96,17 @@ def process_caption_job(job_data: dict) -> None:
                 if existing_job.status in ["completed", "error"]:
                     logger.info(f"[{job_id}] Skipping captioning: job is already '{existing_job.status}'.")
                     return
-                if existing_job.status == "processing":
-                    from datetime import datetime, timedelta
-                    if existing_job.updated_at and existing_job.updated_at > datetime.now() - timedelta(minutes=5):
-                        logger.warning(f"[{job_id}] Skipping: job is already being processed (updated recently).")
+                if existing_job.status == "rendering_captions":
+                    from datetime import datetime, timedelta, timezone
+                    if existing_job.updated_at and existing_job.updated_at > datetime.now(timezone.utc) - timedelta(minutes=5):
+                        logger.warning(f"[{job_id}] Skipping: caption render is already being processed (updated recently).")
                         return
-                    logger.info(f"[{job_id}] Job is 'processing' but stale. Re-taking ownership.")
+                    logger.info(f"[{job_id}] Job is 'rendering_captions' but stale. Re-taking ownership.")
     except Exception as e:
         logger.warning(f"[{job_id}] Could not verify job status in DB: {e}")
 
     logger.info(f"[{job_id}] Starting caption job for {len(clips)} clips.")
+    crud.update_job_status(session, job_id, "rendering_captions", "Rendering captions...")
     
     final_clips_metadata = []
 

@@ -7,7 +7,7 @@ object (or None / bool on failure).  Callers own the session lifecycle.
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from sqlmodel import Session, select
@@ -33,8 +33,8 @@ def create_job(session: Session, job_id: str, config: dict) -> Job:
     job = Job(
         id=job_id,
         status="queued",
-        created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
         config=config,
         clips=[],
         error=None,
@@ -64,7 +64,7 @@ def list_jobs(session: Session, limit: int = 100) -> List[Job]:
 
 def _touch(job: Job) -> None:
     """Update the updated_at timestamp in-place (no commit)."""
-    job.updated_at = datetime.utcnow()
+    job.updated_at = datetime.now(timezone.utc)
 
 
 def update_job_status(

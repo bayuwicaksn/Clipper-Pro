@@ -86,8 +86,8 @@ def process_job(job_data: dict) -> None:
                     return
                 if existing_job.status == "processing":
                     # If it was updated very recently, assume another worker is active
-                    from datetime import datetime, timedelta
-                    if existing_job.updated_at and existing_job.updated_at > datetime.now() - timedelta(minutes=5):
+                    from datetime import datetime, timedelta, timezone
+                    if existing_job.updated_at and existing_job.updated_at > datetime.now(timezone.utc) - timedelta(minutes=5):
                         logger.warning(f"[{job_id}] Skipping: job is already being processed by another worker (updated recently).")
                         return
                     logger.info(f"[{job_id}] Job is 'processing' but stale. Re-taking ownership.")
@@ -184,8 +184,8 @@ def process_export_job(job_data: dict) -> None:
                     logger.info(f"[{export_id}] Skipping export: job is already '{existing_job.status}'.")
                     return
                 if existing_job.status == "processing":
-                    from datetime import datetime, timedelta
-                    if existing_job.updated_at and existing_job.updated_at > datetime.now() - timedelta(minutes=5):
+                    from datetime import datetime, timedelta, timezone
+                    if existing_job.updated_at and existing_job.updated_at > datetime.now(timezone.utc) - timedelta(minutes=5):
                         logger.warning(f"[{export_id}] Skipping: export is already being processed (updated recently).")
                         return
                     logger.info(f"[{export_id}] Export is 'processing' but stale. Re-taking ownership.")
@@ -254,7 +254,9 @@ def process_export_job(job_data: dict) -> None:
             return
 
         # ── Step 3: Delegate Visuals (Captions) to Node Worker ──
-        # We create a pseudo-job for the caption worker
+        # Update status to mark it's waiting for Node worker
+        update_job_db(export_id, {"status": "awaiting_captions", "status_message": "Queuing captions..."})
+        
         delegated = publish_to_caption_worker(
             job_id=export_id, # Use export_id so it updates the specific export entry
             job_dir=job_dir,

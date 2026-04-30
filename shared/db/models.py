@@ -1,5 +1,5 @@
 from sqlmodel import SQLModel, Field, Column, JSON
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Any, Dict, List
 
 class Job(SQLModel, table=True):
@@ -8,8 +8,8 @@ class Job(SQLModel, table=True):
     progress: int = Field(default=0)
     status_message: Optional[str] = Field(default=None)
     error_message: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
-    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
     
     # Use native JSON/JSONB for better performance and scalability
     config: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
