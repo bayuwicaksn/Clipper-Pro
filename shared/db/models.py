@@ -1,17 +1,19 @@
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field, Column, JSON
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Any, Dict, List
 
 class Job(SQLModel, table=True):
     id: str = Field(primary_key=True)
-    status: str
+    status: str = Field(index=True)
     progress: int = Field(default=0)
     status_message: Optional[str] = Field(default=None)
     error_message: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    config: Optional[str] = Field(default=None)  # Stored as JSON string
-    clips: Optional[str] = Field(default="[]")   # Stored as JSON string
+    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    updated_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    
+    # Use native JSON/JSONB for better performance and scalability
+    config: Optional[Dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    clips: List[Dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
 
     @property
     def error(self) -> Optional[str]:

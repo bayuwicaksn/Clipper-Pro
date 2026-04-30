@@ -35,8 +35,8 @@ def create_job(session: Session, job_id: str, config: dict) -> Job:
         status="queued",
         created_at=datetime.utcnow(),
         updated_at=datetime.utcnow(),
-        config=json.dumps(config, ensure_ascii=False),
-        clips="[]",
+        config=config,
+        clips=[],
         error=None,
     )
     session.add(job)
@@ -101,13 +101,12 @@ def update_job_clips(
     session: Session, job_id: str, clips: list
 ) -> Optional[Job]:
     """Persist a new clips list (serialised as JSON) for *job_id*."""
-    job = get_job_config(session, job_id) # wait, the fix had get_job
     job = get_job(session, job_id)
     if not job:
         logger.warning("update_job_clips: job %s not found", job_id)
         return None
 
-    job.clips = json.dumps(clips, ensure_ascii=False)
+    job.clips = clips
     _touch(job)
     session.add(job)
     session.commit()
@@ -129,9 +128,6 @@ def update_job(session: Session, job_id: str, data: dict) -> Optional[Job]:
     allowed_columns = {col for col in Job.__fields__}
     for key, value in data.items():
         if key in allowed_columns:
-            # Serialise list/dict values that map to JSON columns.
-            if isinstance(value, (list, dict)) and key in ("clips", "config"):
-                value = json.dumps(value, ensure_ascii=False)
             setattr(job, key, value)
         else:
             logger.debug("update_job: ignoring unknown field '%s'", key)
@@ -161,22 +157,10 @@ def delete_job(session: Session, job_id: str) -> bool:
 def get_job_config(session: Session, job_id: str) -> Optional[dict]:
     """Return the config dict for a job, or None."""
     job = get_job(session, job_id)
-    if not job or not job.config:
-        return None
-    try:
-        return json.loads(job.config)
-    except json.JSONDecodeError:
-        logger.error("Job %s has invalid JSON in config column", job_id)
-        return None
+    return job.config if job else None
 
 
 def get_job_clips(session: Session, job_id: str) -> List[dict]:
     """Return the clips list for a job, or []."""
     job = get_job(session, job_id)
-    if not job or not job.clips:
-        return []
-    try:
-        return json.loads(job.clips) or []
-    except json.JSONDecodeError:
-        logger.error("Job %s has invalid JSON in clips column", job_id)
-        return []
+    return job.clips if job and job.clips else []

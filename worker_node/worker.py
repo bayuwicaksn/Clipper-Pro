@@ -219,7 +219,7 @@ def process_caption_job(job_data: dict) -> None:
             "status": "completed",
             "progress": 100,
             "status_message": "All captions rendered",
-            "clips": json.dumps(final_clips_metadata)
+            "clips": final_clips_metadata
         })
         logger.info(f"[{job_id}] Worker Node finished and updated DB to 'completed'.")
 
