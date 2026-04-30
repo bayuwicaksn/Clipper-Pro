@@ -291,11 +291,7 @@ async def export_clip(job_id: str, data: ExportRequest, session: Session = Depen
             logger.info(f"[EXPORT] Reset existing job record for retry: {export_id}")
         else:
             try:
-                crud.create_job(session, Job(
-                    id=export_id,
-                    status="queued",
-                    config=json.dumps(data.model_dump())
-                ))
+                crud.create_job(session, export_id, data.model_dump())
             except Exception as e:
                 logger.warning(f"[EXPORT] Failed to create job record: {e}")
     except Exception as e:
