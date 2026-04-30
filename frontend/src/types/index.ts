@@ -38,6 +38,7 @@ export interface Clip {
   exports?: ExportedFile[];
   auto_background_enabled?: boolean;
 }
+}
 
 export interface ExportedFile {
   filename: string;
@@ -45,7 +46,7 @@ export interface ExportedFile {
 }
 
 export interface Segment {
-  id?: string | number;
+  id: string; // Required UUID for fresh start
   start: number;
   end: number;
   crop_x?: number;
@@ -61,15 +62,44 @@ export interface ProgressState {
 }
 
 export interface CaptionSettings {
+  presetId: string;
+  presetName?: string;
+  fontName: string;
   fontSize: number;
-  color: string;
-  strokeColor: string;
-  strokeWidth: number;
-  fontFamily: string;
-  uppercase: boolean;
-  animation?: string;
-  preset?: string;
-  vertical_pos?: number;
+  fontWeight: string;
+  primaryColor: string;
+  outlineColor: string;
+  outlineWidth: number;
+  isItalic: boolean;
+  isUnderline: boolean;
+  isUppercase: boolean;
+  shadowEnabled: boolean;
+  shadowColor: string;
+  shadowOffsetX: number;
+  shadowOffsetY: number;
+  shadowBlur: number;
+  autoHighlight: boolean;
+  highlightColorGreen: string;
+  highlightColorYellow: string;
+  lineLimit: number;
+  captionX: number;
+  captionY: number;
+  captionWidth: number;
+  verticalMargin: number;
+}
+
+export interface CaptionPreset {
+  id: string;
+  name: string;
+  colors?: {
+    primary?: string;
+    outline?: string;
+  };
+  layout?: {
+    outline_width?: number;
+    shadow?: boolean;
+    vertical_margin?: number;
+  };
 }
 
 export interface Word {
@@ -80,6 +110,29 @@ export interface Word {
   speaker?: string;
 }
 
-export interface Transcript {
+export interface TranscriptResponse {
   words: Word[];
 }
+
+export interface EditorStatePayload {
+  segments: Segment[];
+  active_segment_index: number;
+  caption_settings: Partial<CaptionSettings>;
+  clip?: {
+    start_time: string;
+    end_time: string;
+    custom_crop_x?: number;
+    auto_background_enabled: boolean;
+  };
+}
+
+export interface EditorStateResponse {
+  exists: boolean;
+  segments?: Segment[];
+  active_segment_index?: number;
+  caption_settings?: Partial<CaptionSettings>;
+  saved_at?: string;
+  status?: string;
+}
+
+export type NotifyFn = (message: string, type: 'success' | 'error' | 'info' | 'warning') => void;

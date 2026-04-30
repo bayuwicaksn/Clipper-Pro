@@ -3,7 +3,11 @@ import {
   Clip, 
   Segment, 
   CaptionSettings, 
-  ProgressState 
+  ProgressState,
+  EditorStatePayload,
+  EditorStateResponse,
+  CaptionPreset,
+  Word
 } from "../types";
 
 export const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
@@ -46,14 +50,14 @@ export const deleteProject = (id: string) =>
 
 // ─── Jobs / Pipeline ─────────────────────────────────────────────────────────
 
-export const startProcessing = (data: any) => 
+export const startProcessing = (data: { url: string; [key: string]: any }) => 
   apiFetch<{ job_id: string; status: string }>('/api/process', {
     method: 'POST',
     body: JSON.stringify(data),
   });
 
 export const getJobStatus = (jobId: string) => 
-  apiFetch<any>(`/api/status/${jobId}`);
+  apiFetch<{ status: string; progress: number; status_message?: string }>(`/api/status/${jobId}`);
 
 export const fetchClips = (jobId: string) => 
   apiFetch<{ clips: Clip[] }>(`/api/clips/${jobId}`);
@@ -61,9 +65,9 @@ export const fetchClips = (jobId: string) =>
 // ─── Editor State ────────────────────────────────────────────────────────────
 
 export const loadEditorState = (jobId: string, clipIndex: number) => 
-  apiFetch<any>(`/api/load_editor/${jobId}?clip_index=${clipIndex}`);
+  apiFetch<EditorStateResponse>(`/api/load_editor/${jobId}?clip_index=${clipIndex}`);
 
-export const saveEditorState = (jobId: string, clipIndex: number, payload: any) => 
+export const saveEditorState = (jobId: string, clipIndex: number, payload: EditorStatePayload) => 
   apiFetch<{ status: string; saved_at: string }>(`/api/save_editor/${jobId}?clip_index=${clipIndex}`, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -72,7 +76,7 @@ export const saveEditorState = (jobId: string, clipIndex: number, payload: any) 
 // ─── Captions & AI ───────────────────────────────────────────────────────────
 
 export const fetchCaptionPresets = () => 
-  apiFetch<{ presets: any[] }>('/api/captions/presets');
+  apiFetch<{ presets: CaptionPreset[] }>('/api/captions/presets');
 
 export const fetchTranscript = (
   jobId: string,
@@ -85,13 +89,13 @@ export const fetchTranscript = (
   if (bounds?.start !== undefined) params.set('start', String(bounds.start));
   if (bounds?.end !== undefined) params.set('end', String(bounds.end));
   const query = params.toString();
-  return apiFetch<any[]>(`/api/transcript/${jobId}/${clipIdx}${query ? `?${query}` : ''}`);
+  return apiFetch<Word[]>(`/api/transcript/${jobId}/${clipIdx}${query ? `?${query}` : ''}`);
 };
 
 export const generateCaptionComposition = async (
   jobId: string, 
-  transcript: any[], 
-  captionSettings: any, 
+  transcript: Word[], 
+  captionSettings: CaptionSettings, 
   aspectRatio: string = '9:16'
 ): Promise<string> => {
   const response = await fetch(`${API_BASE}/api/caption_composition/${jobId}`, {
@@ -109,7 +113,15 @@ export const autoTrackFace = (jobId: string, clipIndex: number, timestamp: numbe
 
 // ─── Export ──────────────────────────────────────────────────────────────────
 
-export const startExport = (jobId: string, payload: any) => 
+export const startExport = (jobId: string, payload: {
+  filename: string;
+  clip_index: number;
+  segments: Segment[];
+  caption_settings: CaptionSettings;
+  transcript: Word[];
+  aspect_ratio: string;
+  auto_background_enabled: boolean;
+}) => 
   apiFetch<{ export_id: string }>(`/api/export/${jobId}`, {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -132,7 +144,3 @@ export const uploadCookies = (file: File) => {
     },
   });
 };
-
-// Override apiFetch for uploadCookies to handle FormData correctly
-// (Actually apiFetch sets application/json by default, so we need to be careful)
-// Let's refine apiFetch to NOT set Content-Type if it's already set to empty string.

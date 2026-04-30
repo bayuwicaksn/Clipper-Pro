@@ -115,11 +115,6 @@ export default function Timeline({
   const { frames } = useVideoExtraction(project?.id, startTime, totalDuration, frameCount);
   const playerFrame = useCurrentPlayerFrame(playerRef, isPlayerReady);
 
-  React.useEffect(() => {
-    if (appMode === 'editor' && normalizedTimelineSegments.length > 0) {
-      console.log('[Timeline] computed range:', { startTime, totalEnd, totalDuration, segCount: segments.length });
-    }
-  }, [appMode, normalizedTimelineSegments, startTime, totalDuration, totalEnd, segments]);
 
   const activeTimelineSegment = appMode === 'clipper'
     ? normalizedTimelineSegments[0]
