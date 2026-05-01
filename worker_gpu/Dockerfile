@@ -38,12 +38,21 @@ RUN mkdir -p /app/.cache/whisper
 # Copy requirements
 COPY requirements.txt .
 
-# Install PyTorch CPU dulu (bisa diganti cu121 untuk CUDA)
+# ── PyTorch Installation ──
+# Currently set to CPU. 
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir \
     torch \
     torchvision \
     --index-url https://download.pytorch.org/whl/cpu
+
+# NOTE: To actually use the Cloud Run L4 GPU, comment out the CPU block above 
+# and uncomment the CUDA 12.1 block below:
+# RUN pip install --no-cache-dir --upgrade pip && \
+#     pip install --no-cache-dir \
+#     torch \
+#     torchvision \
+#     --index-url https://download.pytorch.org/whl/cu121
 
 # Install remaining requirements
 RUN pip install --no-cache-dir -r requirements.txt
