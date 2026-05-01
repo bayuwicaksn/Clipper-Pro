@@ -20,10 +20,7 @@ def get_storage_client():
 class CustomLogger:
     """Redirects yt-dlp logs to standard print for Cloud Logging"""
     def debug(self, msg):
-        if msg.startswith('[debug] '):
-            pass # Uncomment to see verbose debug logs
-        else:
-            print(msg)
+        print(msg)
             
     def info(self, msg):
         print(msg)
