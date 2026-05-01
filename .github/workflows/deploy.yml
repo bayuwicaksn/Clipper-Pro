@@ -282,7 +282,7 @@ jobs:
             --image $IMAGE:${{ github.sha }} \
             --region ${{ env.GCP_REGION }} \
             --platform managed \
-            --allow-unauthenticated \
+            --no-allow-unauthenticated \
             --port 8080 \
             --memory 4Gi \
             --cpu 2 \
@@ -290,7 +290,7 @@ jobs:
             --max-instances 1 \
             --timeout 3600 \
             --concurrency 1 \
-            --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},WHISPER_MODEL=medium,GPU_ENABLED=false,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_JOBS=${{ secrets.PUBSUB_SUBSCRIPTION_JOBS || 'clipper-jobs-sub' }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
+            --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},WHISPER_MODEL=medium,GPU_ENABLED=false,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
 
   # ── Job 4: Build & Push Worker Node ──────────────────────────────────
   build-worker-node:
@@ -355,7 +355,7 @@ jobs:
             --image $IMAGE:${{ github.sha }} \
             --region ${{ env.GCP_REGION }} \
             --platform managed \
-            --allow-unauthenticated \
+            --no-allow-unauthenticated \
             --port 8080 \
             --memory 2Gi \
             --cpu 2 \
@@ -363,9 +363,65 @@ jobs:
             --max-instances 1 \
             --timeout 1800 \
             --concurrency 1 \
-            --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_CAPTION=${{ secrets.PUBSUB_SUBSCRIPTION_CAPTION || 'clipper-caption-jobs-sub' }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
+            --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
 
-  # ── Job 5: Notify ─────────────────────────────────────────────────────
+  # ── Job 5: Configure Push Subscriptions ──────────────────────────────
+  configure-push-subs:
+    name: Configure Push Subscriptions
+    runs-on: ubuntu-latest
+    needs: [ build-worker-gpu, build-worker-node ]
+    if: |
+      needs.build-worker-gpu.result == 'success' ||
+      needs.build-worker-node.result == 'success'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Setup gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Setup Push Subscriptions
+        run: |
+          JOBS_TOPIC="${{ secrets.PUBSUB_TOPIC_JOBS || 'clipper-jobs' }}"
+          JOBS_SUB="${{ secrets.PUBSUB_SUBSCRIPTION_JOBS || 'clipper-jobs-sub' }}"
+          CAPTION_TOPIC="${{ secrets.PUBSUB_TOPIC_CAPTION || 'clipper-caption-jobs' }}"
+          CAPTION_SUB="${{ secrets.PUBSUB_SUBSCRIPTION_CAPTION || 'clipper-caption-jobs-sub' }}"
+
+          # Ambil URL worker setelah deploy
+          GPU_URL=$(gcloud run services describe clipper-worker-gpu \
+            --region ${{ env.GCP_REGION }} --format 'value(status.url)' 2>/dev/null || echo "")
+          NODE_URL=$(gcloud run services describe clipper-worker-node \
+            --region ${{ env.GCP_REGION }} --format 'value(status.url)' 2>/dev/null || echo "")
+
+          echo "GPU Worker URL: $GPU_URL"
+          echo "Node Worker URL: $NODE_URL"
+
+          # Update Job Subscription (GPU)
+          if [ -n "$GPU_URL" ]; then
+            echo "Updating subscription for GPU to PUSH mode..."
+            gcloud pubsub subscriptions update "$JOBS_SUB" \
+              --push-endpoint="$GPU_URL/pubsub" \
+              --push-auth-service-account=${{ secrets.GCP_SA_EMAIL }} \
+              --ack-deadline=600
+          fi
+
+          # Update Caption Subscription (Node)
+          if [ -n "$NODE_URL" ]; then
+            echo "Updating subscription for Node to PUSH mode..."
+            gcloud pubsub subscriptions update "$CAPTION_SUB" \
+              --push-endpoint="$NODE_URL/pubsub" \
+              --push-auth-service-account=${{ secrets.GCP_SA_EMAIL }} \
+              --ack-deadline=300
+          fi
+
+  # ── Job 6: Notify ─────────────────────────────────────────────────────
   notify:
     name: Deployment Summary
     runs-on: ubuntu-latest
