@@ -57,7 +57,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Install remaining requirements
 RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir --upgrade yt-dlp
+    pip install --no-cache-dir --upgrade "yt-dlp[default,curl-cffi]"
 
 # Setup bgutil-ytdlp-pot-provider JS backend for YouTube BotGuard evasion
 RUN git clone https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /app/bgutil-ytdlp-pot-provider && \
@@ -78,7 +78,8 @@ COPY --from=shared . /app/shared/
 COPY . .
 
 # Create non-root user
-RUN adduser --disabled-password --gecos "" workeruser && \
+RUN chmod +x /app/entrypoint.sh && \
+    adduser --disabled-password --gecos "" workeruser && \
     chown -R workeruser:workeruser /app
 USER workeruser
 
@@ -87,4 +88,4 @@ HEALTHCHECK --interval=60s --timeout=10s --start-period=30s \
     CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
 # Entry point
-CMD ["python3", "worker.py"]
+CMD ["/app/entrypoint.sh"]

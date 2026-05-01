@@ -109,8 +109,8 @@ def download_video(url, output_dir, progress_callback=None):
             'youtube': {
                 'player_client': ['mweb', 'default']
             },
-            'youtubepot-bgutilscript': {
-                'server_home': ['/app/bgutil-ytdlp-pot-provider/server']
+            'youtubepot-bgutilhttp': {
+                'base_url': ['http://127.0.0.1:4416']
             }
         },
         
@@ -120,6 +120,7 @@ def download_video(url, output_dir, progress_callback=None):
         'nocheckcertificate': True,
         'noplaylist': True,
         'verbose': True,
+        'impersonate': 'chrome',
     }
 
     # ─── Execute Download ─────────────────────────────────────────────────────

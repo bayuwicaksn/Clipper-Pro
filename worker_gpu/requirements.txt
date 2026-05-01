@@ -16,6 +16,8 @@ psycopg2-binary>=2.9.9
 
 # Video Processing
 yt-dlp
+curl_cffi>=0.7.3
+yt-dlp-ejs
 bgutil-ytdlp-pot-provider
 ffmpeg-python>=0.2.0
 pysrt>=1.1.2
