@@ -7,6 +7,14 @@ import json
 import subprocess
 import re
 import time
+from google.cloud import storage
+
+# Initialize GCS client once at module level to avoid overhead in every download
+_storage_client = None
+try:
+    _storage_client = storage.Client()
+except Exception as e:
+    print(f"[Downloader] Failed to initialize global storage client: {e}")
 
 
 def download_video(url, output_dir, progress_callback=None):
@@ -63,11 +71,9 @@ def download_video(url, output_dir, progress_callback=None):
     
     # Check GCS first (central storage for UI uploads)
     bucket_name = os.getenv("GCS_BUCKET")
-    if bucket_name:
+    if bucket_name and _storage_client:
         try:
-            from google.cloud import storage
-            client = storage.Client()
-            bucket = client.bucket(bucket_name)
+            bucket = _storage_client.bucket(bucket_name)
             blob = bucket.blob('cookies.txt')
             if blob.exists():
                 blob.download_to_filename(cookies_path_tmp)
@@ -97,28 +103,28 @@ def download_video(url, output_dir, progress_callback=None):
         {
             'name': 'default (EJS + Deno)',
             'args': [
-                '--format', 'bv[height<=1080][vcodec~="^(avc|h264)"]+ba/bv[height<=1080]+ba/b/best',
+                '--format', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo[height<=1080]+bestaudio/best',
             ]
         },
         {
             'name': 'web_creator client',
             'args': [
                 '--extractor-args', 'youtube:player_client=web_creator',
-                '--format', 'bv[height<=1080][vcodec~="^(avc|h264)"]+ba/bv[height<=1080]+ba/b/best',
+                '--format', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo[height<=1080]+bestaudio/best',
             ]
         },
         {
             'name': 'live Chrome cookies',
             'args': [
                 '--cookies-from-browser', 'chrome',
-                '--format', 'bv[height<=1080][vcodec~="^(avc|h264)"]+ba/bv[height<=1080]+ba/b/best',
+                '--format', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo[height<=1080]+bestaudio/best',
             ]
         },
         {
             'name': 'live Edge cookies',
             'args': [
                 '--cookies-from-browser', 'edge',
-                '--format', 'bv[height<=1080][vcodec~="^(avc|h264)"]+ba/bv[height<=1080]+ba/b/best',
+                '--format', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo[height<=1080]+bestaudio/best',
             ]
         },
         {
