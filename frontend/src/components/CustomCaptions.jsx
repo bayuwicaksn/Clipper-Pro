@@ -16,14 +16,11 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
   const scaleFactor = (frameHeight || refHeight) / refHeight;
 
   const switchEveryMs = useMemo(() => {
-    const limit = settings?.lineLimit ?? 2;
-    if (limit === 1) return 800;
-    if (limit === 3) return 2200;
     return 1500;
-  }, [settings?.lineLimit]);
+  }, []);
 
   const { pages } = useMemo(() => {
-    const limit = settings?.lineLimit ?? 2;
+    const limit = 2; // Hardcoded to 2 lines for standard layout
     const fontSize = settings?.fontSize ?? 100;
     const captionWidthPct = settings?.captionWidth ?? 85;
     
@@ -95,7 +92,7 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
     }
 
     return { pages: pagesResult };
-  }, [transcript, settings?.lineLimit, settings?.fontSize, settings?.captionWidth, settings?.isUppercase]);
+  }, [transcript, settings?.fontSize, settings?.captionWidth, settings?.isUppercase]);
 
   if (settings?.presetId === 'none') return null;
 

@@ -81,7 +81,6 @@ export interface CaptionSettings {
   autoHighlight: boolean;
   highlightColor1: string;
   highlightColor2: string;
-  lineLimit: number;
   captionX: number;
   captionY: number;
   captionWidth: number;

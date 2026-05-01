@@ -62,7 +62,6 @@ export const createBaseSlice: EditorSlice<any> = (set, get) => ({
     autoHighlight: true,
     highlightColor1: '#04f827',
     highlightColor2: '#fffd03',
-    lineLimit: 2,
     captionX: 0.5,
     captionY: 0.82,
     captionWidth: 100,

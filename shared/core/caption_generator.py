@@ -140,7 +140,7 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
     x_pos_ratio    = settings.get('captionX', 0.5)
     y_pos_ratio    = settings.get('captionY', 0.82)
     max_width_pct  = settings.get('captionWidth', 85) / 100.0
-    line_limit     = settings.get('lineLimit', 2)
+    line_limit     = 2 # Hardcoded default
     style_type     = settings.get('styleType', 'classic').lower()
     auto_highlight = settings.get('autoHighlight', True)
 

@@ -79,8 +79,7 @@ def generate_caption_composition(
     if shadow_blur is None: shadow_blur = 2
 
     auto_highlight  = bool(settings.get('autoHighlight', True))
-    line_limit      = settings.get('lineLimit')
-    if line_limit is None: line_limit = 2
+    line_limit      = 2 # Hardcoded default
     
     caption_x       = settings.get('captionX')
     if caption_x is None: caption_x = 0.5
