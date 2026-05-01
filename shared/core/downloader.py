@@ -1,5 +1,6 @@
 import os
 import tempfile
+import uuid
 import yt_dlp
 
 # Lazy initialization for GCS client to avoid slow module imports
@@ -51,7 +52,10 @@ def download_video(url, output_dir, progress_callback=None):
 
     # ─── Cookie Management ────────────────────────────────────────────────────
     cookies_path = None
-    tmp_cookie_file = os.path.join(tempfile.gettempdir(), 'cookies.txt')
+    
+    # Generate unique temp file name to prevent race conditions during concurrent downloads
+    unique_id = uuid.uuid4().hex
+    tmp_cookie_file = os.path.join(tempfile.gettempdir(), f'cookies_{unique_id}.txt')
     
     bucket_name = os.getenv("GCS_BUCKET")
     client = get_storage_client()
@@ -120,7 +124,6 @@ def download_video(url, output_dir, progress_callback=None):
         'nocheckcertificate': True,
         'noplaylist': True,
         'verbose': True,
-        'impersonate': 'chrome',
     }
 
     # ─── Execute Download ─────────────────────────────────────────────────────
@@ -140,6 +143,11 @@ def download_video(url, output_dir, progress_callback=None):
             }
             
     except yt_dlp.utils.DownloadError as e:
+        if cookies_path and os.path.exists(cookies_path) and 'cookies_' in cookies_path:
+            try:
+                os.remove(cookies_path)
+            except OSError:
+                pass
         raise RuntimeError(f"yt-dlp failed: {e}")
 
     # Check for actual output files
@@ -157,6 +165,13 @@ def download_video(url, output_dir, progress_callback=None):
 
     if progress_callback:
         progress_callback('download', 'Download complete!', 15)
+
+    # Cleanup temporary cookie file to prevent /tmp from filling up
+    if cookies_path and os.path.exists(cookies_path) and 'cookies_' in cookies_path:
+        try:
+            os.remove(cookies_path)
+        except OSError:
+            pass
 
     return {
         'video_path': actual_video,
