@@ -22,9 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    # yt-dlp dependencies
+    # yt-dlp dependencies (nodejs is CRITICAL for bypassing YouTube bot detection)
     curl \
     wget \
+    nodejs \
     # General utils
     git \
     && rm -rf /var/lib/apt/lists/*
