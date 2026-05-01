@@ -170,10 +170,8 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
         const isActive = i === activeIndex;
 
         // Auto-highlight regex — synced with caption_generator.py GREEN_REGEX / YELLOW_REGEX
-        const isColor1Keyword = autoHighlight && /^(sukses|kaya|uang|viral|trending|presiden|milyar|triliun|cuan|profit|untung|berhasil)/i.test(token.text.trim());
         const isColor2Keyword = autoHighlight && /^(penting|rahasia|masalah|solusi|gila|keren|tips|trik|cara|fakta|bukti|seru|menarik|wow)/i.test(token.text.trim());
 
-        const isPast = i < activeIndex;
         const isFuture = i > activeIndex;
 
         // Pseudo-spring animation
