@@ -144,4 +144,13 @@ if __name__ == "__main__":
     # Initialize diagnostics
     from shared.core.gpu_utils import run_gpu_diagnostics
     run_gpu_diagnostics()
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Pre-warm GCS connection to eliminate download startup latency
+    logger.info("Pre-warming GCS client...")
+    try:
+        from shared.core.downloader import get_storage_client
+        get_storage_client()
+        logger.info("GCS client pre-warmed successfully.")
+    except Exception as e:
+        logger.warning(f"Failed to pre-warm GCS client: {e}")
+        
+    uvicorn.run(app, host="0.0.0.0", port=port)
