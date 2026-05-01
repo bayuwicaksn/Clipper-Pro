@@ -16,6 +16,7 @@ psycopg2-binary>=2.9.9
 
 # Video Processing
 yt-dlp
+bgutil-ytdlp-pot-provider
 ffmpeg-python>=0.2.0
 pysrt>=1.1.2
 Pillow>=10.0.0

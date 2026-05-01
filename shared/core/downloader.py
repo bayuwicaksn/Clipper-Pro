@@ -107,11 +107,10 @@ def download_video(url, output_dir, progress_callback=None):
         'retries': 5,
         'socket_timeout': 30,
         
-        # Anti-Bot Strategy (Client spoofing)
+        # Anti-Bot Strategy (Client spoofing with PO Token support)
         'extractor_args': {
             'youtube': {
-                'player_client': ['ios', 'android', 'mweb', 'web_creator', 'default'],
-                'player_skip': ['webpage', 'configs']
+                'player_client': ['mweb', 'default']
             }
         },
         
