@@ -97,9 +97,11 @@ def process_export_task(export_data: dict):
             custom_end=export_config.get("custom_end"),
             custom_crop_x=export_config.get("custom_crop_x"),
             segments=export_config.get("segments"),
-            aspect_ratio=export_config.get("aspect_ratio")
+            aspect_ratio=export_config.get("aspect_ratio"),
+            delegate_captions=True, # GPU worker handles only reframing, Node worker handles captions
+            export_id=export_id
         )
-        update_job_db(export_id, {"status": "completed", "progress": 100})
+        update_job_db(export_id, {"status": "completed", "progress": 100, "status_message": "GPU Processing complete (Reframing done)"})
     except Exception as e:
         logger.error(f"[{export_id}] Export failed: {e}", exc_info=True)
         update_job_db(export_id, {"status": "error", "error_message": str(e)})

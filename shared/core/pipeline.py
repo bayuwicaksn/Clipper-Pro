@@ -80,7 +80,11 @@ class Pipeline:
             else:
                 self.progress('analyze', 'Generating precise word-level timestamps with Whisper...', 25)
             
-            _, words = get_source_transcript(self.job_dir, provider=self.config.get('transcription_provider', 'openai-whisper'))
+            _, words = get_source_transcript(
+                self.job_dir, 
+                provider=self.config.get('transcription_provider', 'openai-whisper'),
+                progress_callback=self.progress
+            )
             
             # Convert word list to the string format expected by analyze_highlights
             transcript_lines = []

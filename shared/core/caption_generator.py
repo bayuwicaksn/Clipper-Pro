@@ -389,20 +389,39 @@ def _extract_audio(video_path, audio_path):
 
 def _transcribe_audio(audio_path, offset=0):
     from openai import OpenAI
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
-    with open(audio_path, 'rb') as f:
-        transcription = client.audio.transcriptions.create(
-            model='whisper-1', file=f, response_format='verbose_json', timestamp_granularities=['word']
-        )
-    words = []
-    raw_words = getattr(transcription, 'words', None) or []
-    for w in raw_words:
-        text = w.word if hasattr(w, 'word') else w.get('word', '')
-        start = (w.start if hasattr(w, 'start') else w.get('start', 0)) + offset
-        end = (w.end if hasattr(w, 'end') else w.get('end', 0)) + offset
-        if text.strip():
-            words.append({'word': text.strip(), 'start': start, 'end': end})
-    return words
+    import time
+    # Add explicit timeout to prevent indefinite hangs
+    client = OpenAI(api_key=settings.OPENAI_API_KEY, timeout=60.0)
+    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"[TRANSCRIPT] Sending {os.path.basename(audio_path)} to OpenAI Whisper API (Attempt {attempt+1})...")
+            with open(audio_path, 'rb') as f:
+                transcription = client.audio.transcriptions.create(
+                    model='whisper-1', file=f, response_format='verbose_json', timestamp_granularities=['word']
+                )
+            
+            words = []
+            raw_words = getattr(transcription, 'words', None) or []
+            for w in raw_words:
+                text = w.word if hasattr(w, 'word') else w.get('word', '')
+                start = (w.start if hasattr(w, 'start') else w.get('start', 0)) + offset
+                end = (w.end if hasattr(w, 'end') else w.get('end', 0)) + offset
+                if text.strip():
+                    words.append({'word': text.strip(), 'start': start, 'end': end})
+            
+            logger.info(f"[TRANSCRIPT] Received response from OpenAI: {len(words)} words.")
+            return words
+            
+        except Exception as e:
+            logger.warning(f"[TRANSCRIPT] API attempt {attempt+1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2 * (attempt + 1)) # Exponential backoff
+            else:
+                logger.error("[TRANSCRIPT] All API attempts failed.")
+                raise e
+    return []
 
 def _transcribe_audio_gpt4o(audio_path, model_name='gpt-4o-mini-transcribe', offset=0):
     """
