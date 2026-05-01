@@ -15,7 +15,7 @@ sqlmodel>=0.0.16
 psycopg2-binary>=2.9.9
 
 # Video Processing
-yt-dlp>=2024.4.9
+yt-dlp>=2024.11.04
 ffmpeg-python>=0.2.0
 pysrt>=1.1.2
 Pillow>=10.0.0

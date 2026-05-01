@@ -108,7 +108,12 @@ def download_video(url, output_dir, progress_callback=None):
         'socket_timeout': 30,
         
         # Anti-Bot Strategy (Client spoofing)
-        'extractor_args': {'youtube': {'player_client': ['web_creator', 'android', 'default']}},
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['ios', 'android', 'mweb', 'web_creator', 'default'],
+                'player_skip': ['webpage', 'configs']
+            }
+        },
         
         'logger': CustomLogger(),
         'progress_hooks': [my_hook],
