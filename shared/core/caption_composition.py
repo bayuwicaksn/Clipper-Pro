@@ -15,8 +15,8 @@ logger = logging.getLogger('pipeline')
 
 # â”€â”€ Auto-Highlight Keyword Patterns â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 # Synced between frontend and backend
-GREEN_REGEX = r"^(sukses|kaya|uang|viral|trending|presiden|milyar|triliun|cuan)"
-YELLOW_REGEX = r"^(penting|rahasia|masalah|solusi|gila|keren|tips|trik|cara|fakta|bukti)"
+GREEN_REGEX  = r"(?i)^(sukses|kaya|uang|viral|trending|presiden|milyar|triliun|cuan|profit|untung|berhasil)"
+YELLOW_REGEX = r"(?i)^(penting|rahasia|masalah|solusi|gila|keren|tips|trik|cara|fakta|bukti|seru|menarik|wow)"
 
 
 def generate_caption_composition(
@@ -66,8 +66,8 @@ def generate_caption_composition(
     outline_width   = settings.get('outlineWidth')
     if outline_width is None: outline_width = 8
     
-    highlight_green = settings.get('highlightColorGreen') or '#04f827'
-    highlight_yellow= settings.get('highlightColorYellow') or '#fffd03'
+    highlight_green = settings.get('highlightColor1') or '#04f827'
+    highlight_yellow= settings.get('highlightColor2') or '#fffd03'
 
     shadow_enabled  = bool(settings.get('shadowEnabled', True))
     shadow_color    = settings.get('shadowColor') or '#000000'
@@ -224,24 +224,25 @@ def generate_caption_composition(
             is_green = auto_highlight and bool(re.match(GREEN_REGEX, w['word'], re.IGNORECASE))
             is_yellow = auto_highlight and bool(re.match(YELLOW_REGEX, w['word'], re.IGNORECASE))
 
+            # Determine static color (always primary color when not active)
             static_color = primary_color
-            if is_green:
-                static_color = highlight_green
-            elif is_yellow:
-                static_color = highlight_yellow
-
             word_spans.append(f'    <span id="{wid}" class="cw" style="color:{static_color}">{w["word"]}</span>')
 
             # GSAP animation for this word becoming active
-            # 1. Highlight ON: scale up, bounce, change color to green
+            # Use highlightColor2 if it's a yellow keyword, otherwise Color 1 (default highlight)
+            active_color = highlight_yellow if is_yellow else highlight_green
             gsap_animations.append(
-                f'  tl.to("#{wid}", {{ color: "{highlight_green}", scale: {scale_active}, y: {y_offset}, duration: {anim_duration}, ease: "back.out(1.7)" }}, {w["start"]});'
+                f'  tl.to("#{wid}", {{ color: "{active_color}", scale: {scale_active}, y: {y_offset}, duration: {anim_duration}, ease: "back.out(1.7)" }}, {w["start"]});'
+            )
+            # Restore to primary color when done
+            gsap_animations.append(
+                f'  tl.to("#{wid}", {{ color: "{primary_color}", scale: 1, y: 0, duration: {anim_duration} }}, {w["end"]});'
             )
 
             # 2. Glow effect for intense styles
             if is_intense and shadow_enabled:
                 gsap_animations.append(
-                    f'  tl.to("#{wid}", {{ textShadow: "{shadow_x}px {shadow_y}px {shadow_blur}px {shadow_color}, 0 0 15px {highlight_green}", duration: {anim_duration} }}, {w["start"]});'
+                    f'  tl.to("#{wid}", {{ textShadow: "{shadow_x}px {shadow_y}px {shadow_blur}px {shadow_color}, 0 0 15px {active_color}", duration: {anim_duration} }}, {w["start"]});'
                 )
 
             # 3. Rotation for intense styles

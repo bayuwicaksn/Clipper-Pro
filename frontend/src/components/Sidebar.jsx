@@ -31,7 +31,7 @@ export default function Sidebar({
   }, [activeTab]);
 
   const updateSettings = (key, value) => {
-    setCaptionSettings({ ...captionSettings, [key]: value });
+    setCaptionSettings(prev => ({ ...prev, [key]: value }));
   };
 
   if (!clip) return <div className="nle-panel-content p-8 text-center text-zinc-500">Select a clip</div>;
@@ -282,12 +282,16 @@ export default function Sidebar({
               {captionSettings.autoHighlight && (
                 <div className="space-y-3 animate-in fade-in duration-300">
                   <div className="bg-[#1e1e21] border border-[#27272a] rounded-xl px-4 py-3.5 flex items-center gap-4 hover:border-zinc-500 transition-colors cursor-pointer group">
-                    <div className="w-6 h-6 rounded-full bg-[#04f827] shadow-[0_0_10px_rgba(4,248,39,0.3)]" />
-                    <span className="text-xs text-zinc-400 font-mono tracking-wider group-hover:text-zinc-200">04f827FF</span>
+                    <div className="w-6 h-6 rounded-full shadow-[0_0_10px_rgba(4,248,39,0.3)] relative flex-shrink-0" style={{ backgroundColor: captionSettings.highlightColor1 || '#04f827' }}>
+                      <input type="color" className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" value={captionSettings.highlightColor1 || '#04f827'} onChange={(e) => updateSettings('highlightColor1', e.target.value)} />
+                    </div>
+                    <span className="text-xs text-zinc-400 font-mono tracking-wider group-hover:text-zinc-200">{(captionSettings.highlightColor1 || '#04f827').replace('#', '').toUpperCase()}FF</span>
                   </div>
                   <div className="bg-[#1e1e21] border border-[#27272a] rounded-xl px-4 py-3.5 flex items-center gap-4 hover:border-zinc-500 transition-colors cursor-pointer group">
-                    <div className="w-6 h-6 rounded-full bg-[#fffd03] shadow-[0_0_10px_rgba(255,253,3,0.3)]" />
-                    <span className="text-xs text-zinc-400 font-mono tracking-wider group-hover:text-zinc-200">FFFD03FF</span>
+                    <div className="w-6 h-6 rounded-full shadow-[0_0_10px_rgba(255,253,3,0.3)] relative flex-shrink-0" style={{ backgroundColor: captionSettings.highlightColor2 || '#fffd03' }}>
+                      <input type="color" className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" value={captionSettings.highlightColor2 || '#fffd03'} onChange={(e) => updateSettings('highlightColor2', e.target.value)} />
+                    </div>
+                    <span className="text-xs text-zinc-400 font-mono tracking-wider group-hover:text-zinc-200">{(captionSettings.highlightColor2 || '#fffd03').replace('#', '').toUpperCase()}FF</span>
                   </div>
                 </div>
               )}

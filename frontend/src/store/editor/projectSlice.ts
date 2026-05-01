@@ -148,6 +148,8 @@ export const createProjectSlice: EditorSlice<any> = (set, get) => ({
         presetName: p.name,
         primaryColor: p.colors?.primary || state.captionSettings.primaryColor,
         outlineColor: p.colors?.outline || state.captionSettings.outlineColor,
+        highlightColor1: p.colors?.highlight1 || state.captionSettings.highlightColor1,
+        highlightColor2: p.colors?.highlight2 || state.captionSettings.highlightColor2,
         outlineWidth: p.layout?.outline_width || state.captionSettings.outlineWidth,
         shadowEnabled: !!p.layout?.shadow,
         verticalMargin: p.layout?.vertical_margin || state.captionSettings.verticalMargin

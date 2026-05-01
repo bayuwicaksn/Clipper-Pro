@@ -114,8 +114,8 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
 
   // ── Extract settings with defaults (matching caption_generator.py) ──
   const primaryColor = settings?.primaryColor ?? "#FFFFFF";
-  const highlightColorGreen = settings?.highlightColorGreen ?? "#04f827";
-  const highlightColorYellow = settings?.highlightColorYellow ?? "#fffd03";
+  const highlightColor1 = settings?.highlightColor1 ?? "#04f827";
+  const highlightColor2 = settings?.highlightColor2 ?? "#fffd03";
   const outlineColor = settings?.outlineColor ?? "#000000";
   const outlineWidth = settings?.outlineWidth ?? 8;
   const fontSize = settings?.fontSize ?? 100;
@@ -173,8 +173,8 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
         const isActive = i === activeIndex;
 
         // Auto-highlight regex — synced with caption_generator.py GREEN_REGEX / YELLOW_REGEX
-        const isGreenKeyword = autoHighlight && /^(sukses|kaya|uang|viral|trending|presiden|milyar|triliun|cuan)/i.test(token.text.trim());
-        const isYellowKeyword = autoHighlight && /^(penting|rahasia|masalah|solusi|gila|keren|tips|trik|cara|fakta|bukti)/i.test(token.text.trim());
+        const isColor1Keyword = autoHighlight && /^(sukses|kaya|uang|viral|trending|presiden|milyar|triliun|cuan|profit|untung|berhasil)/i.test(token.text.trim());
+        const isColor2Keyword = autoHighlight && /^(penting|rahasia|masalah|solusi|gila|keren|tips|trik|cara|fakta|bukti|seru|menarik|wow)/i.test(token.text.trim());
 
         const isPast = i < activeIndex;
         const isFuture = i > activeIndex;
@@ -190,17 +190,14 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
         let opacity = 1;
 
         if (isActive) {
-          color = highlightColorGreen;
-        } else if (isPast) {
+          // When active, use Color 2 if it's a Color 2 keyword, otherwise use Color 1 (default highlight)
+          color = isColor2Keyword ? highlightColor2 : highlightColor1;
+        } else {
+          // Future/Past words stay as primary color (color biasa)
           color = primaryColor;
-        } else if (isFuture) {
-          color = primaryColor;
-          opacity = isIntense ? 0.6 : 0.8;
-        }
-
-        if (!isActive) {
-          if (isGreenKeyword) color = highlightColorGreen;
-          else if (isYellowKeyword) color = highlightColorYellow;
+          if (isFuture) {
+            opacity = isIntense ? 0.6 : 0.8;
+          }
         }
 
         let scale = 1;

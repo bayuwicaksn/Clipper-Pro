@@ -119,8 +119,8 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
     outline_width  = settings.get('outlineWidth', 8)
     
     # Highlight Colors
-    highlight_green  = _hex_to_ass(settings.get('highlightColorGreen', '#04f827'))
-    highlight_yellow = _hex_to_ass(settings.get('highlightColorYellow', '#fffd03'))
+    highlight_green  = _hex_to_ass(settings.get('highlightColor1', '#04f827'))
+    highlight_yellow = _hex_to_ass(settings.get('highlightColor2', '#fffd03'))
     
     # Font Style & Weight
     font_weight    = settings.get('fontWeight', 'Black')
@@ -193,8 +193,8 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
         chunks.append(current_chunk)
 
     # Regex patterns for auto-highlighting
-    GREEN_REGEX  = r"^(sukses|kaya|uang|viral|trending|presiden|milyar|triliun|cuan)"
-    YELLOW_REGEX = r"^(penting|rahasia|masalah|solusi|gila|keren|tips|trik|cara|fakta|bukti)"
+    GREEN_REGEX  = r"(?i)^(sukses|kaya|uang|viral|trending|presiden|milyar|triliun|cuan|profit|untung|berhasil)"
+    YELLOW_REGEX = r"(?i)^(penting|rahasia|masalah|solusi|gila|keren|tips|trik|cara|fakta|bukti|seru|menarik|wow)"
 
     # Styles
     # Alignment 5 = Middle Center
@@ -235,17 +235,10 @@ def _generate_ass_file(words, settings, ass_path, video_w, video_h):
                 is_active = (i == j)
                 word_txt = w['word']
                 
-                # Determine Color
-                is_green_keyword = auto_highlight and re.match(GREEN_REGEX, word_txt, re.IGNORECASE)
-                is_yellow_keyword = auto_highlight and re.match(YELLOW_REGEX, word_txt, re.IGNORECASE)
-                
                 current_color = primary_color
                 if is_active:
-                    current_color = highlight_green
-                elif is_green_keyword:
-                    current_color = highlight_green
-                elif is_yellow_keyword:
-                    current_color = highlight_yellow
+                    # When active, use Color 2 for yellow keywords, otherwise Color 1 (default highlight)
+                    current_color = highlight_yellow if is_yellow_keyword else highlight_green
                 
                 # Apply Tags
                 tags = [f"\\c{current_color}"]

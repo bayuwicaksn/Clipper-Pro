@@ -79,8 +79,8 @@ export interface CaptionSettings {
   shadowOffsetY: number;
   shadowBlur: number;
   autoHighlight: boolean;
-  highlightColorGreen: string;
-  highlightColorYellow: string;
+  highlightColor1: string;
+  highlightColor2: string;
   lineLimit: number;
   captionX: number;
   captionY: number;
@@ -94,6 +94,8 @@ export interface CaptionPreset {
   colors?: {
     primary?: string;
     outline?: string;
+    highlight1?: string;
+    highlight2?: string;
   };
   layout?: {
     outline_width?: number;
