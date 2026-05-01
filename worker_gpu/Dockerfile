@@ -29,6 +29,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     npm \
     # General utils
     git \
+    && ln -s /usr/bin/nodejs /usr/bin/node \
+    && curl -fsSL https://deno.land/x/install/install.sh | sh \
+    && mv /root/.deno/bin/deno /usr/bin/deno \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
