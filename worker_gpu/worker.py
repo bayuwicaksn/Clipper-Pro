@@ -3,56 +3,16 @@ import sys
 import json
 import logging
 import signal
-import time
+import base64
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from pathlib import Path
-
-# Setup logging first
-logging.basicConfig(
-    level=os.getenv("LOG_LEVEL", "INFO"),
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
-logger = logging.getLogger("worker_gpu")
-
-# ── Health Check HTTP Server (START ASAP FOR CLOUD RUN) ────────────────
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/health' or self.path == '/':
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            status = "ok" # Simplified for speed
-            self.wfile.write(json.dumps({"status": status, "worker": "gpu"}).encode())
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-    def log_message(self, format, *args):
-        pass
-
-def start_health_server():
-    port = int(os.getenv("PORT", "8080"))
-    try:
-        server = HTTPServer(("0.0.0.0", port), HealthHandler)
-        logger.info(f"âœ… Health server listening on port {port}")
-        server.serve_forever()
-    except Exception as e:
-        logger.error(f"â Œ Failed to start health server: {e}")
-
-# Start health server in a background thread IMMEDIATELY
-health_thread = threading.Thread(target=start_health_server, daemon=True)
-health_thread.start()
-
-# Now proceed with heavy imports and setup
-from dotenv import load_dotenv
-load_dotenv()
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 
 # Import from shared modules
 from shared.core.pipeline import Pipeline
 from shared.db import crud
 from shared.db.database import engine
 from sqlmodel import Session
+from shared.config import settings
 
 # Setup logging
 logging.basicConfig(
@@ -62,12 +22,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("worker_gpu")
 
-# Global event untuk Graceful Shutdown
-shutdown_event = threading.Event()
+app = FastAPI(title="Clipper Worker GPU")
 
 # ── Database Update Helper ─────────────────────────────────────────────
 def update_job_db(job_id: str, data: dict):
-    """Update job status/data using shared CRUD logic."""
     try:
         with Session(engine) as session:
             crud.update_job(session, job_id, data)
@@ -76,324 +34,114 @@ def update_job_db(job_id: str, data: dict):
         logger.error(f"[{job_id}] Database update failed: {e}")
         return False
 
-
-
-
 # ── Processing Logic ──────────────────────────────────────────────────
-def process_job(job_data: dict) -> None:
+def process_job_task(job_data: dict):
+    """Heavy lifting logic moved to a background task."""
     job_id = job_data.get("job_id")
     config = job_data.get("config", {})
-    
-    from shared.utils.logging_utils import set_correlation_id
-    set_correlation_id(job_id)
     
     if not job_id:
         logger.error("Job data missing job_id")
         return
 
-    logger.info(f"[{job_id}] Received job. Check status before processing...")
-    
-    # ── Check if this job should even run ──
-    try:
-        with Session(engine) as session:
-            existing_job = crud.get_job(session, job_id)
-            if existing_job:
-                if existing_job.status in ["completed", "error"]:
-                    logger.info(f"[{job_id}] Skipping analysis: job is already '{existing_job.status}'.")
-                    return
-                if existing_job.status == "processing":
-                    # If it was updated very recently, assume another worker is active
-                    from datetime import datetime, timedelta, timezone
-                    if existing_job.updated_at and existing_job.updated_at > datetime.now(timezone.utc) - timedelta(minutes=5):
-                        logger.warning(f"[{job_id}] Skipping: job is already being processed by another worker (updated recently).")
-                        return
-                    logger.info(f"[{job_id}] Job is 'processing' but stale. Re-taking ownership.")
-    except Exception as e:
-        logger.warning(f"[{job_id}] Could not verify job status in DB: {e}")
+    from shared.utils.logging_utils import set_correlation_id
+    set_correlation_id(job_id)
 
     workspace_root = os.getenv("CLIPPER_WORKSPACE", "workspace")
     job_dir = os.path.join(workspace_root, job_id)
     os.makedirs(job_dir, exist_ok=True)
 
     try:
-        # 1. Update Status to Processing
-        update_job_db(job_id, {"status": "processing"})
+        update_job_db(job_id, {"status": "processing", "progress": 5})
         
-        # 2. Progress Callback (Now updates DB)
         def progress_callback(step, message, progress):
             logger.info(f"[{job_id}] {step}: {message} ({progress}%)")
-            # Update database with current progress and status message
             update_job_db(job_id, {
                 "status": "processing",
                 "progress": progress,
                 "status_message": f"{step}: {message}"
             })
 
-        # 3. Run Pipeline Initial Steps
         pipeline = Pipeline(job_dir, config, progress_callback)
         clips_metadata = pipeline.run()
 
-        if not clips_metadata:
-            logger.warning(f"[{job_id}] No clips generated by analyzer.")
-            update_job_db(job_id, {"status": "completed", "clips": [], "error": None})
-            return
-
-        # 4. Finish with metadata and CLEAR the temporary progress message
         update_job_db(job_id, {
             "status": "completed",
-            "clips": clips_metadata,
+            "clips": clips_metadata or [],
             "status_message": "Analysis complete",
             "error_message": None 
         })
-
     except Exception as e:
         logger.error(f"[{job_id}] Pipeline failed: {e}", exc_info=True)
         update_job_db(job_id, {"status": "error", "error_message": str(e)})
 
+def process_export_task(export_data: dict):
+    job_id = export_data.get("job_id")
+    export_id = export_data.get("export_id")
+    job_dir = export_data.get("job_dir")
+    clip_metadata = export_data.get("clip_metadata")
+    export_config = export_data.get("export_config", {})
 
-def publish_to_caption_worker(job_id: str, job_dir: str, clips: list, config: dict):
-    """Delegate caption rendering to the Node worker via Pub/Sub."""
-    from shared.config import settings
-    if not settings.pubsub_enabled:
-        logger.warning(f"[{job_id}] Pub/Sub not enabled, cannot delegate captions.")
-        return False
-        
-    from google.cloud import pubsub_v1
-    publisher = pubsub_v1.PublisherClient()
-    topic_path = publisher.topic_path(settings.GCP_PROJECT_ID, settings.PUBSUB_TOPIC_CAPTION)
-    
-    payload = {
-        "job_id": job_id,
-        "job_dir": job_dir,
-        "clips": clips,
-        "config": config
-    }
-    
-    try:
-        data = json.dumps(payload).encode("utf-8")
-        future = publisher.publish(topic_path, data)
-        logger.info(f"[{job_id}] Delegated caption task for {len(clips)} clips to Node worker.")
-        return True
-    except Exception as e:
-        logger.error(f"[{job_id}] Failed to delegate caption task: {e}")
-        return False
-
-
-def process_export_job(job_data: dict) -> None:
-    """Handle targeted clip export (FFmpeg rendering)."""
-    job_id = job_data.get("job_id")
-    
-    from shared.utils.logging_utils import set_correlation_id
-    set_correlation_id(f"export_{job_id}")
-
-    job_dir = job_data.get("job_dir")
-    clip_metadata = job_data.get("clip_metadata")
-    config = job_data.get("export_config", {})
-    
-    # Use the specific export_id provided by the backend, or fallback if missing
-    export_id = job_data.get("export_id") or f"export_{job_id}_{clip_metadata.get('clip_index', 0)}"
-    
-    # ── Check if this job should even run ──
-    try:
-        with Session(engine) as session:
-            existing_job = crud.get_job(session, export_id)
-            if existing_job:
-                if existing_job.status in ["completed", "error"]:
-                    logger.info(f"[{export_id}] Skipping export: job is already '{existing_job.status}'.")
-                    return
-                if existing_job.status == "processing":
-                    from datetime import datetime, timedelta, timezone
-                    if existing_job.updated_at and existing_job.updated_at > datetime.now(timezone.utc) - timedelta(minutes=5):
-                        logger.warning(f"[{export_id}] Skipping: export is already being processed (updated recently).")
-                        return
-                    logger.info(f"[{export_id}] Export is 'processing' but stale. Re-taking ownership.")
-    except Exception as e:
-        logger.warning(f"[{export_id}] Could not verify job status in DB: {e}")
-
-    logger.info(f"[{export_id}] Starting export process (with delegation)...")
-    update_job_db(export_id, {"status": "processing", "config": config})
+    if not export_id: return
 
     try:
-        def progress_callback(step, message, progress):
+        update_job_db(export_id, {"status": "processing", "progress": 10})
+        def callback(step, message, progress):
             logger.info(f"[{export_id}] {step}: {message} ({progress}%)")
-            update_job_db(export_id, {
-                "status": "processing",
-                "progress": progress,
-                "status_message": f"{step}: {message}"
-            })
-        
-        pipeline = Pipeline(job_dir, config, progress_callback)
-        
-        # ── Step 1: GPU Heavy Work (Clipping + Reframing) ──
-        # We set delegate_captions=True to skip the slow Playwright render here
-        result = pipeline.export_single_clip(
+            update_job_db(export_id, {"status": "processing", "progress": progress, "status_message": message})
+
+        p = Pipeline(job_dir, {}, progress_callback=callback)
+        p.export_single_clip(
             clip_metadata,
-            custom_start=config.get("custom_start"),
-            custom_end=config.get("custom_end"),
-            custom_crop_x=config.get("custom_crop_x"),
-            segments=config.get("segments"),
-            aspect_ratio=config.get("aspect_ratio", "9:16"),
-            auto_background_enabled=job_data.get("auto_background_enabled", True),
-            delegate_captions=True,
-            export_id=export_id
+            custom_start=export_config.get("custom_start"),
+            custom_end=export_config.get("custom_end"),
+            custom_crop_x=export_config.get("custom_crop_x"),
+            segments=export_config.get("segments"),
+            aspect_ratio=export_config.get("aspect_ratio")
         )
-        
-        # ── Step 2: Handle Caption Decision ──
-        # Debug: Print metadata and config to see why it's still delegating
-        logger.info(f"[{export_id}] DEBUG - clip_metadata: {json.dumps(clip_metadata, indent=2)}")
-        logger.info(f"[{export_id}] DEBUG - export_config: {json.dumps(config, indent=2)}")
-
-        # Check if captions are requested (check multiple possible keys)
-        has_captions_metadata = clip_metadata.get("has_captions")
-        enable_captions_config = config.get("enable_captions")
-        
-        # Check for "none" preset in settings
-        caption_settings = config.get("caption_settings") or {}
-        preset_id = caption_settings.get("presetId") or caption_settings.get("preset_id")
-        
-        # Determine final decision
-        use_captions = True
-        if has_captions_metadata is False:
-            use_captions = False
-        if enable_captions_config is False:
-            use_captions = False
-        if preset_id == "none":
-            use_captions = False
-        
-        # Extra check: if transcript is empty and no auto-caption is requested
-        if not use_captions:
-            logger.info(f"[{export_id}] No captions requested. Finishing job locally...")
-            import shutil
-            final_path = result.get("export_path")
-            if final_path:
-                os.makedirs(os.path.dirname(final_path), exist_ok=True)
-                shutil.move(result["video_path"], final_path)
-                logger.info(f"[{export_id}] Moved reframed video to final path: {final_path}")
-            
-            update_job_db(export_id, {"status": "completed", "status_message": "Export complete", "error_message": None})
-            return
-
-        # ── Step 3: Delegate Visuals (Captions) to Node Worker ──
-        # Update status to mark it's waiting for Node worker
-        update_job_db(export_id, {"status": "awaiting_captions", "status_message": "Queuing captions..."})
-        
-        # Update clip metadata with the unique filename so Node worker can find it
-        if result.get("clip_name"):
-            clip_metadata["filename"] = f"{result['clip_name']}.mp4"
-
-        delegated = publish_to_caption_worker(
-            job_id=export_id, # Use export_id so it updates the specific export entry
-            job_dir=job_dir,
-            clips=[clip_metadata],
-            config=config
-        )
-        
-        if not delegated:
-            # Fallback if Pub/Sub fails: try to finish it here (slow but safe)
-            logger.warning(f"[{export_id}] Delegation failed, falling back to local render...")
-            pipeline._process_single_clip(
-                result["video_path"], clip_metadata, 
-                clip_metadata.get("clip_index", 0), 1, 
-                config.get("aspect_ratio", "9:16")
-            )
-            update_job_db(export_id, {"status": "completed", "status_message": "Export complete (fallback)", "error_message": None})
-            logger.info(f"[{export_id}] Export complete (via local fallback)!")
-        else:
-            logger.info(f"[{export_id}] Handed off to Node worker. Waiting for completion...")
-            # Note: The Node worker will update DB status to "completed" when done.
-
+        update_job_db(export_id, {"status": "completed", "progress": 100})
     except Exception as e:
-        logger.error(f"[{export_id}] Export process failed: {e}", exc_info=True)
+        logger.error(f"[{export_id}] Export failed: {e}", exc_info=True)
         update_job_db(export_id, {"status": "error", "error_message": str(e)})
 
+# ── API Endpoints ─────────────────────────────────────────────────────
 
-# ── Pub/Sub Listener ──────────────────────────────────────────────────
-def listen_to_subscription(project_id, subscription_id, handler_func):
-    from google.cloud import pubsub_v1
-    subscriber = pubsub_v1.SubscriberClient()
-    subscription_path = subscriber.subscription_path(project_id, subscription_id)
-    
-    def callback(message):
-        try:
-            # Always acknowledge IMMEDIATELY to prevent infinite retry loops on startup
-            # If the processing fails, the DB state will correctly show "error"
-            message.ack()
-            
-            data = json.loads(message.data.decode("utf-8"))
-            handler_func(data)
-        except Exception as e:
-            logger.error(f"Error in {subscription_id} handler: {e}", exc_info=True)
+@app.get("/health")
+@app.get("/")
+async def health():
+    return {"status": "ok", "worker": "gpu"}
 
-    logger.info(f"Connecting to Pub/Sub: {subscription_id}")
-    streaming_pull_future = subscriber.subscribe(subscription_path, callback=callback)
-    
-    with subscriber:
-        try:
-            while not shutdown_event.is_set() and not streaming_pull_future.done():
-                time.sleep(1)
-        except Exception as e:
-            logger.error(f"Subscriber {subscription_id} loop error: {e}")
-        finally:
-            streaming_pull_future.cancel()
+@app.post("/pubsub")
+async def pubsub_handler(request: Request, background_tasks: BackgroundTasks):
+    """Handle incoming Pub/Sub Push messages."""
+    try:
+        envelope = await request.json()
+        if not envelope or "message" not in envelope:
+            raise HTTPException(status_code=400, detail="Invalid Pub/Sub message format")
 
-def start_listeners():
-    from shared.config import settings
-    project_id = settings.GCP_PROJECT_ID
-    
-    if not project_id:
-        logger.warning("GCP_PROJECT_ID not set — running in idle mode")
-        while not shutdown_event.is_set():
-            time.sleep(10)
-        return
+        payload_raw = envelope["message"].get("data")
+        if not payload_raw:
+            return {"status": "ignored", "reason": "no_data"}
 
-    # Create threads for each subscription
-    listeners = [
-        (settings.PUBSUB_SUBSCRIPTION_JOBS, process_job),
-        (settings.PUBSUB_SUBSCRIPTION_EXPORT, process_export_job),
-    ]
+        payload = json.loads(base64.b64decode(payload_raw).decode("utf-8"))
+        
+        # Determine if it's a job or an export
+        if "export_id" in payload:
+            logger.info(f"Received Export Push: {payload.get('export_id')}")
+            background_tasks.add_task(process_export_task, payload)
+        else:
+            logger.info(f"Received Job Push: {payload.get('job_id')}")
+            background_tasks.add_task(process_job_task, payload)
 
-    threads = []
-    for sub_id, handler in listeners:
-        t = threading.Thread(
-            target=listen_to_subscription,
-            args=(project_id, sub_id, handler),
-            name=f"Listener-{sub_id}",
-            daemon=True
-        )
-        t.start()
-        threads.append(t)
-    
-    # Wait for shutdown
-    while not shutdown_event.is_set():
-        time.sleep(1)
-
-def handle_shutdown(signum, frame):
-    logger.info("Shutdown signal received! Initiating graceful shutdown...")
-    shutdown_event.set()
-
+        return {"status": "accepted"}
+    except Exception as e:
+        logger.error(f"Pub/Sub handler error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
-    # Register Graceful Shutdown signals
-    signal.signal(signal.SIGTERM, handle_shutdown)
-    signal.signal(signal.SIGINT, handle_shutdown)
-
-    # 0. Setup Structured Logging
-    from shared.utils.logging_utils import setup_structured_logging
-    setup_structured_logging()
-
-    # 1. GPU Diagnostics
+    import uvicorn
+    port = int(os.getenv("PORT", "8080"))
+    # Initialize diagnostics
     from shared.core.gpu_utils import run_gpu_diagnostics
-    success, results = run_gpu_diagnostics()
-    
-    if not success:
-        if os.getenv("STRICT_GPU_CHECK", "false").lower() == "true":
-            import sys
-            logger.error("CRITICAL: GPU Diagnostics failed and STRICT_GPU_CHECK is enabled. Exiting.")
-            sys.exit(1)
-        else:
-            logger.warning("GPU Diagnostics failed. Continuing in compatibility mode (CPU fallback).")
-
-
-    logger.info("GPU Worker starting listeners...")
-    start_listeners()
-    logger.info("Worker process exited cleanly.")
+    run_gpu_diagnostics()
+    uvicorn.run(app, host="0.0.0.0", port=port)

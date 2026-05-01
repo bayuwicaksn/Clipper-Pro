@@ -290,7 +290,7 @@ jobs:
             --max-instances 1 \
             --timeout 3600 \
             --concurrency 1 \
-            --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},WHISPER_MODEL=medium,GPU_ENABLED=false,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_JOBS=${{ secrets.PUBSUB_SUBSCRIPTION_JOBS }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
+            --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},WHISPER_MODEL=medium,GPU_ENABLED=false,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_JOBS=${{ secrets.PUBSUB_SUBSCRIPTION_JOBS || 'clipper-jobs-sub' }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
 
   # ── Job 4: Build & Push Worker Node ──────────────────────────────────
   build-worker-node:
