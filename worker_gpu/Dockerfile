@@ -25,11 +25,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # yt-dlp dependencies (nodejs is CRITICAL for bypassing YouTube bot detection)
     curl \
     wget \
+    unzip \
     nodejs \
     npm \
     # General utils
     git \
-    && ln -s /usr/bin/nodejs /usr/bin/node \
+    # Install Deno
     && curl -fsSL https://deno.land/x/install/install.sh | sh \
     && mv /root/.deno/bin/deno /usr/bin/deno \
     && rm -rf /var/lib/apt/lists/*
