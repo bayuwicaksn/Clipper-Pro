@@ -99,10 +99,25 @@ def download_video(url, output_dir, progress_callback=None):
     # Try multiple download strategies
     # IMPORTANT: Force H.264 codec (avc1). AV1 has NO hardware decoder on GTX 1050 Ti,
     # causing 90% CPU usage during clipping. H.264 is lightweight and GPU-decodable.
+    # Try multiple download strategies to bypass bot detection
     strategies = [
         {
-            'name': 'default (EJS + Deno)',
+            'name': 'default (web client)',
             'args': [
+                '--format', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo[height<=1080]+bestaudio/best',
+            ]
+        },
+        {
+            'name': 'android client',
+            'args': [
+                '--extractor-args', 'youtube:player_client=android',
+                '--format', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo[height<=1080]+bestaudio/best',
+            ]
+        },
+        {
+            'name': 'ios client',
+            'args': [
+                '--extractor-args', 'youtube:player_client=ios',
                 '--format', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo[height<=1080]+bestaudio/best',
             ]
         },
@@ -111,27 +126,6 @@ def download_video(url, output_dir, progress_callback=None):
             'args': [
                 '--extractor-args', 'youtube:player_client=web_creator',
                 '--format', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo[height<=1080]+bestaudio/best',
-            ]
-        },
-        {
-            'name': 'live Chrome cookies',
-            'args': [
-                '--cookies-from-browser', 'chrome',
-                '--format', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo[height<=1080]+bestaudio/best',
-            ]
-        },
-        {
-            'name': 'live Edge cookies',
-            'args': [
-                '--cookies-from-browser', 'edge',
-                '--format', 'bestvideo[height<=1080][vcodec^=avc1]+bestaudio/bestvideo[height<=1080]+bestaudio/best',
-            ]
-        },
-        {
-            'name': 'any format, remote EJS',
-            'args': [
-                '--remote-components', 'ejs:github',
-                '--format', 'bv[height<=1080][vcodec~="^(avc|h264)"]+ba/b/best/bv+ba',
             ]
         },
     ]
