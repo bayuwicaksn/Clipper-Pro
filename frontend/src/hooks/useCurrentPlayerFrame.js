@@ -1,6 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 
-export const useCurrentPlayerFrame = (ref, isPlayerReady) => {
+export const useCurrentPlayerFrame = (ref) => {
   const subscribe = useCallback(
     (onStoreChange) => {
       const { current } = ref;
@@ -17,7 +17,7 @@ export const useCurrentPlayerFrame = (ref, isPlayerReady) => {
         current.removeEventListener('frameupdate', updater);
       };
     },
-    [ref, isPlayerReady]
+    [ref]
   );
 
   const data = useSyncExternalStore(

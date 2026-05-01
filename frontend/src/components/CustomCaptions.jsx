@@ -3,7 +3,6 @@ import React, { useMemo } from 'react';
 
 
 export const CustomCaptions = ({ transcript, styleType = "classic", settings, currentTimeMs, frameHeight, aspectRatio = '9:16', inlineMode = false }) => {
-  if (settings?.presetId === 'none') return null;
 
   // Derive the original video height based on standard 1080p width to match backend's video_h
   // If portrait (9:16), it's 1920. If landscape (16:9), it's 1080. If square, 1080.
@@ -97,6 +96,8 @@ export const CustomCaptions = ({ transcript, styleType = "classic", settings, cu
 
     return { pages: pagesResult };
   }, [transcript, settings?.lineLimit, settings?.fontSize, settings?.captionWidth, settings?.isUppercase]);
+
+  if (settings?.presetId === 'none') return null;
 
   // Find active page
   const activePage = pages.find((page, index) => {

@@ -8,7 +8,7 @@ import {
   ChevronLeft, Save, Download,
   Scissors, Layers
 } from 'lucide-react';
-import { timestampToSeconds, formatTimeHHMMSS } from "@/utils/time";
+import { timestampToSeconds } from "@/utils/time";
 import * as api from "../api/client";
 
 import { useEditorStore } from '@/store/editorStore';
@@ -34,25 +34,21 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
   // Store State
   const {
     project, setProject,
-    clips, setClips,
+    clips,
     activeClipIndex, setActiveClipIndex,
     appMode, setAppMode,
     segments, setSegments,
     activeSegmentIndex, setActiveSegmentIndex,
-    activeTab, setActiveTab,
-    captionSettings, setCaptionSettings,
+    captionSettings,
     currentTime, setCurrentTime,
-    seekRequested, setSeekRequested,
+    setSeekRequested,
     isPlaying, setIsPlaying,
     aspectRatio, setAspectRatio,
-    isProcessing, setIsProcessing,
-    statusMessage, setStatusMessage,
-    exportProgress, setExportProgress,
-    saveStatus, setSaveStatus,
-    lastSaved,
+    isProcessing,
+    statusMessage,
+    exportProgress,
+    saveStatus,
     isLoadingSavedState,
-    transcript,
-    isLoadingTranscript,
     loadProjectData,
     loadEditorState,
     saveEditorState,
@@ -69,14 +65,6 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
   const activeClip = clips[activeClipIndex];
   const activeClipStart = activeClip?.start_time ? timestampToSeconds(activeClip.start_time) : 0;
   const activeClipEnd = activeClip?.end_time ? timestampToSeconds(activeClip.end_time) : 60;
-
-  const activeSegment = appMode === 'clipper' ? {
-    start: activeClipStart,
-    end: activeClipEnd,
-    crop_x: activeClip?.custom_crop_x || 0.5,
-    crop_y: 0.5,
-    crop_z: 1.0
-  } : segments[activeSegmentIndex];
 
   const handleAutoSplitClick = () => {
     if (segments.length > 1) {
@@ -98,6 +86,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
       setActiveClipIndex(initialClipIndex);
       loadProjectData(initialProject.id);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- store setters are stable
   }, [initialProject, initialClipIndex]);
 
   // Handle Clip/State Loading
@@ -105,6 +94,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
     if (project?.id && clips.length > 0) {
       loadEditorState(project.id, activeClipIndex);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadEditorState is stable
   }, [project?.id, activeClipIndex, clips.length]);
 
   // Safety: Clamp activeClipIndex
@@ -112,6 +102,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
     if (clips.length > 0 && activeClipIndex >= clips.length) {
       setActiveClipIndex(0);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- setActiveClipIndex is stable
   }, [clips, activeClipIndex]);
 
   // In clipper mode, the segment is derived locally (activeSegment above).
@@ -131,6 +122,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
       auto_background_enabled: activeClip.auto_background_enabled !== false
     }]);
     setActiveSegmentIndex(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-init segments on clip/mode change
   }, [
     appMode,
     activeClipIndex,
@@ -150,6 +142,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
     }, 250);
 
     return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only refetch on clip bounds change
   }, [
     activeClipStart,
     activeClipEnd,
@@ -163,6 +156,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
       setSeekRequested(activeClipStart);
       setCurrentTime(activeClipStart);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omit setCurrentTime/setSeekRequested
   }, [activeClipIndex, appMode, activeClipStart]);
 
   // Fetch Presets
@@ -206,6 +200,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- setIsPlaying is stable
   }, [isPlaying]);
 
   // Sync Active Segment
@@ -223,6 +218,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
     if (index !== -1 && index !== activeSegmentIndex) {
       setActiveSegmentIndex(index);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- setActiveSegmentIndex is stable
   }, [currentTime, segments, isPlaying, activeSegmentIndex]);
 
   // Auto-save
@@ -232,6 +228,7 @@ export default function EditorLayout({ project: initialProject, initialClipIndex
       saveEditorState();
     }, 2000);
     return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- saveEditorState is stable
   }, [segments, captionSettings, clips, activeClipIndex, activeSegmentIndex, isLoadingSavedState, appMode]);
 
 

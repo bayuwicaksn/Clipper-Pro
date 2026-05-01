@@ -42,7 +42,7 @@ export function useInteractivePreview(
   const [isSnappedZ, setIsSnappedZ] = useState(false);
   const [isSnappedCaptionX, setIsSnappedCaptionX] = useState(false);
   
-  const canvasPanStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  const canvasPanStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
 
   const handleMouseMove = useCallback((e: MouseEvent) => {
     let rafId: number | null = null;
@@ -210,8 +210,8 @@ export function useInteractivePreview(
           }));
         }
       } else if (isCanvasPanning) {
-        setPanX(canvasPanStart.current.panX + (e.clientX - canvasPanStart.current.x));
-        setPanY(canvasPanStart.current.panY + (e.clientY - canvasPanStart.current.y));
+        setPanX(canvasPanStartRef.current.panX + (e.clientX - canvasPanStartRef.current.x));
+        setPanY(canvasPanStartRef.current.panY + (e.clientY - canvasPanStartRef.current.y));
       }
     });
   }, [dragState, isCanvasPanning, props, videoAspectRatio, setCaptionSettings, setPanX, setPanY, videoRef, aspectRatioBoxRef, captionOverlayRef]);
@@ -239,6 +239,6 @@ export function useInteractivePreview(
     dragState, setDragState,
     isCanvasPanning, setIsCanvasPanning,
     isSnappedX, isSnappedY, isSnappedZ, isSnappedCaptionX,
-    canvasPanStart
+    canvasPanStartRef
   };
 }

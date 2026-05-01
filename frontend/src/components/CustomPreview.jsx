@@ -27,7 +27,6 @@ const CustomPreview = ({
   const {
     project,
     aspectRatio,
-    currentTime,
     setCurrentTime,
     seekRequested,
     isPlaying: playing,
@@ -40,7 +39,7 @@ const CustomPreview = ({
     appMode
   } = useEditorStore();
 
-  const onTimeUpdate = (time) => setCurrentTime(time);
+  const onTimeUpdate = useCallback((time) => setCurrentTime(time), [setCurrentTime]);
   const jobId = project?.id;
   const videoRef = useRef(null);
   const backgroundVideoRef = useRef(null);
@@ -65,7 +64,7 @@ const CustomPreview = ({
     dragState, setDragState,
     isCanvasPanning, setIsCanvasPanning,
     isSnappedX, isSnappedY, isSnappedZ, isSnappedCaptionX,
-    canvasPanStart
+    canvasPanStartRef
   } = useInteractivePreview(videoRef, aspectRatioBoxRef, captionOverlayRef, {
     cropX, cropY, cropZ, setCropX, setCropY, setCropZ, captionSettings, setCaptionSettings, videoAspectRatio
   });
@@ -76,7 +75,7 @@ const CustomPreview = ({
       setPanX(0);
       setPanY(0);
     }
-  }, []);
+  }, [setPanX, setPanY]);
 
   const videoSrc = jobId ? `${api.API_BASE}/api/preview_source/${jobId}` : null;
 
@@ -96,15 +95,15 @@ const CustomPreview = ({
     if (e.target.closest('[data-no-canvas-pan]')) return;
     setActiveElement(null);
     setIsCanvasPanning(true);
-    canvasPanStart.current = { x: e.clientX, y: e.clientY, panX: panX, panY: panY };
-  }, [setIsCanvasPanning, canvasPanStart, panX, panY]);
+    canvasPanStartRef.current = { x: e.clientX, y: e.clientY, panX: panX, panY: panY };
+  }, [setIsCanvasPanning, canvasPanStartRef, panX, panY]);
 
   const handleCanvasDoubleClick = useCallback((e) => {
     if (e.target.closest('[data-no-canvas-pan]')) return;
     handleZoomChange(1.0); // Reset zoom to Fit
     setPanX(0);            // Center pan
     setPanY(0);
-  }, [handleZoomChange]);
+  }, [handleZoomChange, setPanX, setPanY]);
 
   const startResize = useCallback((e, handle) => {
     e.preventDefault();
@@ -225,6 +224,7 @@ const CustomPreview = ({
         listenersRef.current['frameupdate']?.forEach(cb => cb());
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omit 'playing'
   }, [startSecs, isVideoReady]);
 
   // Time Updates + Caption iframe sync
@@ -311,6 +311,7 @@ const CustomPreview = ({
     return () => {
       if (compositionGenTimer.current) clearTimeout(compositionGenTimer.current);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omit compositionUrl to prevent infinite loop
   }, [appMode, jobId, transcript, captionSettings, aspectRatio]);
 
   // Listen for 'caption-ready' message from iframe
@@ -339,6 +340,7 @@ const CustomPreview = ({
     return () => {
       if (compositionUrl) URL.revokeObjectURL(compositionUrl);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally omit compositionUrl
   }, []);
 
   const handleVideoCanPlay = () => {

@@ -1,5 +1,4 @@
 import React from "react";
-import * as api from "../api/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -24,7 +23,6 @@ import {
   formatDuration,
   formatRulerLabel,
   snapTime,
-  chooseTickStep,
   timestampToSeconds
 } from "@/utils/time";
 
@@ -33,7 +31,6 @@ import { useVideoExtraction } from "../hooks/useVideoExtraction";
 
 export default function Timeline({
   playerRef,
-  isPlayerReady,
   onUpdateSegmentBounds,
   onDeleteSegment,
 }) {
@@ -62,7 +59,10 @@ export default function Timeline({
       crop_x: clip.custom_crop_x || 0.5,
     };
   }, [appMode, clip]);
-  const timelineSegments = appMode === 'clipper' && clipperSegment ? [clipperSegment] : segments;
+  const timelineSegments = React.useMemo(
+    () => appMode === 'clipper' && clipperSegment ? [clipperSegment] : segments,
+    [appMode, clipperSegment, segments]
+  );
 
   // Clip absolute bounds in the source video
   const clipStartSecs = Math.max(0, clip?.start_time ? timestampToSeconds(clip.start_time) : 0);
@@ -111,9 +111,9 @@ export default function Timeline({
     prevTotalDuration.current = totalDuration;
   }, [totalDuration]);
 
-  const { zoomFactor, trackWidth, frameCount, majorTicks, minorTicks } = useTimelineMath(totalDuration, zoom, appMode);
+  const { trackWidth, frameCount, majorTicks, minorTicks } = useTimelineMath(totalDuration, zoom, appMode);
   const { frames } = useVideoExtraction(project?.id, startTime, totalDuration, frameCount);
-  const playerFrame = useCurrentPlayerFrame(playerRef, isPlayerReady);
+  const playerFrame = useCurrentPlayerFrame(playerRef);
 
 
   const activeTimelineSegment = appMode === 'clipper'
@@ -136,6 +136,12 @@ export default function Timeline({
   };
 
   const onTogglePlay = () => useEditorStore.getState().setIsPlaying(!isPlaying);
+
+  const getPct = React.useCallback((time) => {
+    const p = ((Number(time) - startTime) / totalDuration) * 100;
+    if (isNaN(p) || !isFinite(p)) return 0;
+    return Math.max(0, Math.min(100, p));
+  }, [startTime, totalDuration]);
 
   // Auto-scroll to keep playhead in view during playback, scrubbing, or initial load
   React.useEffect(() => {
@@ -164,13 +170,7 @@ export default function Timeline({
     } else if (playheadPx < scrollLeft + buffer) {
       scrollContainer.scrollLeft = Math.max(0, playheadPx - buffer);
     }
-  }, [currentTime, isPlaying, trackWidth]);
-
-  const getPct = (time) => {
-    const p = ((Number(time) - startTime) / totalDuration) * 100;
-    if (isNaN(p) || !isFinite(p)) return 0;
-    return Math.max(0, Math.min(100, p));
-  };
+  }, [currentTime, isPlaying, trackWidth, getPct]);
 
   function handleScrub(event) {
     if (!canvasRef.current || !onSeek) return;

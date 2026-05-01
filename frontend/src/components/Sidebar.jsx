@@ -6,42 +6,33 @@ import { useEditorStore } from '@/store/editorStore';
 
 export default function Sidebar({
   presets,
-  onSplit,
   onAutoSplit,
   onAutoTrack,
   onRegenerateTranscript
 }) {
   const {
-    project,
     clips,
     activeClipIndex,
     activeTab,
     captionSettings,
     setCaptionSettings,
-    currentTime,
-    setCurrentTime,
-    setSeekRequested,
-    transcript,
-    setTranscript,
-    isLoadingTranscript,
     applyCaptionPreset
   } = useEditorStore();
 
   const clip = clips[activeClipIndex];
 
-  const onSeek = (time) => {
-    setSeekRequested(time);
-    setCurrentTime(time);
-  };
   const [activeSubTab, setActiveSubTab] = useState('Presets');
+
+  useEffect(() => {
+    if (activeTab === 'captions') {
+      // Intentional: reset sub-tab when switching to captions panel
+      setActiveSubTab('Presets'); // eslint-disable-line react-hooks/set-state-in-effect
+    }
+  }, [activeTab]);
 
   const updateSettings = (key, value) => {
     setCaptionSettings({ ...captionSettings, [key]: value });
   };
-
-  useEffect(() => {
-    if (activeTab === 'captions') setActiveSubTab('Presets');
-  }, [activeTab]);
 
   if (!clip) return <div className="nle-panel-content p-8 text-center text-zinc-500">Select a clip</div>;
 

@@ -192,6 +192,7 @@ export default function HomeLayout({
           fetchClips(activeJobId);
         });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only reconnect when activeJobId changes
   }, [activeJobId]);
 
   const steps = [
@@ -324,7 +325,7 @@ export default function HomeLayout({
                           if (file) {
                             api.uploadCookies(file)
                             .then(data => notify(data.message || 'Cookies updated', 'success'))
-                            .catch(err => notify('Failed to upload cookies', 'error'));
+                            .catch(err => notify('Failed to upload cookies: ' + err.message, 'error'));
                           }
                         }}
                       />

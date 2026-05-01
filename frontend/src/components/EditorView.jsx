@@ -9,7 +9,7 @@ import {
   Film, Sparkles, Type, Music, Zap 
 } from 'lucide-react';
 
-import { timestampToSeconds } from "@/utils/time";
+
 
 import { useEditorStore } from '@/store/editorStore';
 
@@ -34,6 +34,19 @@ function saveStoredPlayerSize(value) {
   window.localStorage.setItem(PLAYER_SIZE_STORAGE_KEY, String(clampPlayerSize(value)));
 }
 
+function NavItem({ id, icon, label, active, onClick }) {
+  const Icon = icon;
+  return (
+    <div
+      className={`nle-nav-item ${active ? 'active' : ''}`}
+      onClick={() => onClick(active ? null : id)}
+    >
+      <Icon className="w-5 h-5" />
+      <span className="nle-nav-label">{label}</span>
+    </div>
+  );
+}
+
 export default function EditorView({
   playerRef,
   setIsPlayerReady,
@@ -47,19 +60,12 @@ export default function EditorView({
   handleSegmentBoundsChange
 }) {
   const {
-    project,
     clips, setClips,
     activeClipIndex,
     segments, setSegments,
-    activeSegmentIndex, setActiveSegmentIndex,
-    currentTime, setCurrentTime,
-    seekRequested, setSeekRequested,
-    isPlaying, setIsPlaying,
-    aspectRatio,
-    transcript, setTranscript,
-    isLoadingTranscript,
+    activeSegmentIndex,
+    currentTime,
     fetchTranscript,
-    captionSettings, setCaptionSettings,
     activeTab, setActiveTab
   } = useEditorStore();
 
@@ -81,17 +87,7 @@ export default function EditorView({
     });
   };
 
-  function NavItem({ id, icon: Icon, label, active, onClick }) {
-    return (
-      <div
-        className={`nle-nav-item ${active ? 'active' : ''}`}
-        onClick={() => onClick(active ? null : id)}
-      >
-        <Icon className="w-5 h-5" />
-        <span className="nle-nav-label">{label}</span>
-      </div>
-    );
-  }
+
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">

@@ -6,10 +6,35 @@ import { Toaster, toast } from 'sonner'
 
 import * as api from './api/client'
 
+function getInitialState() {
+  const path = window.location.pathname;
+  let jobId = null;
+  let clipIdx = 0;
+
+  if (path.startsWith('/project/') && path.includes('/clip/')) {
+    const parts = path.split('/');
+    let pid = parts[2];
+    if (pid && pid.includes('--')) {
+      pid = pid.split('--').pop();
+    }
+    jobId = pid;
+    clipIdx = parseInt(parts[4]) || 0;
+  } else {
+    const params = new URLSearchParams(window.location.search);
+    let pid = params.get('project');
+    if (pid) {
+      if (pid.includes('--')) pid = pid.split('--').pop();
+      jobId = pid;
+    }
+  }
+  return { jobId, clipIdx };
+}
+
 function App() {
+  const initial = getInitialState();
   const [projects, setProjects] = useState([])
-  const [currentJobId, setCurrentJobId] = useState(null)
-  const [activeClipIndex, setActiveClipIndex] = useState(0)
+  const [currentJobId, setCurrentJobId] = useState(initial.jobId)
+  const [activeClipIndex, setActiveClipIndex] = useState(initial.clipIdx)
 
   const showToast = (message, type = 'info') => {
     if (type === 'success') toast.success(message);
@@ -27,30 +52,6 @@ function App() {
   };
 
   useEffect(() => {
-    const path = window.location.pathname;
-    
-    // Example: /project/pertemuan-bersejarah--477be5cb/clip/0
-    if (path.startsWith('/project/') && path.includes('/clip/')) {
-        const parts = path.split('/');
-        let pid = parts[2];
-        if (pid && pid.includes('--')) {
-          pid = pid.split('--').pop();
-        }
-        setCurrentJobId(pid);
-        
-        const clipIdx = parseInt(parts[4]) || 0;
-        setActiveClipIndex(clipIdx);
-    } 
-    // Fallback search param
-    else {
-        const params = new URLSearchParams(window.location.search);
-        let pid = params.get('project');
-        if (pid) {
-          if (pid.includes('--')) pid = pid.split('--').pop();
-          setCurrentJobId(pid);
-        }
-    }
-    
     refreshProjects();
   }, [])
 
@@ -59,7 +60,6 @@ function App() {
   const isProcessing = activeProject && (activeProject.status === 'processing' || activeProject.status === 'queued');
 
   if (currentJobId && !isProcessing) {
-    const projectData = activeProject || { id: currentJobId, title: "Loading..." };
     return (
       <>
         <EditorLayout 
