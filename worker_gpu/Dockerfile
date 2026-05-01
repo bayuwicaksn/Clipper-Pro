@@ -47,11 +47,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Install remaining requirements
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download Whisper model saat build (bukan saat runtime)
-ARG WHISPER_MODEL=medium
-ENV WHISPER_MODEL=${WHISPER_MODEL}
-RUN python3 -c "import whisper; import os; whisper.load_model(os.getenv('WHISPER_MODEL', 'medium'))" && \
-    echo "Whisper model pre-downloaded OK"
+# Pre-download Whisper model saat build (DISABLED: Using API for now)
+# ARG WHISPER_MODEL=medium
+# ENV WHISPER_MODEL=${WHISPER_MODEL}
+# RUN python3 -c "import whisper; import os; whisper.load_model(os.getenv('WHISPER_MODEL', 'medium'))" && \
+#     echo "Whisper model pre-downloaded OK"
 
 # Copy shared models
 COPY --from=shared . /app/shared/
