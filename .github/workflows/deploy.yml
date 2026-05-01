@@ -199,12 +199,6 @@ jobs:
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend:latest
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend:${{ github.sha }}
 
-      - name: Clear existing secrets on Cloud Run
-        run: |
-          gcloud run services update clipper-backend \
-            --region ${{ env.GCP_REGION }} \
-            --clear-secrets \
-            --clear-env-vars 2>/dev/null || true
 
       - name: Deploy Backend to Cloud Run
         run: |
@@ -283,12 +277,6 @@ jobs:
           build-args: |
             WHISPER_MODEL=medium
 
-      - name: Clear existing secrets on Cloud Run
-        run: |
-          gcloud run services update clipper-worker-gpu \
-            --region ${{ env.GCP_REGION }} \
-            --clear-secrets \
-            --clear-env-vars 2>/dev/null || true
 
       - name: Deploy Worker GPU to Cloud Run
         run: |
@@ -362,12 +350,6 @@ jobs:
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node:latest
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node:${{ github.sha }}
 
-      - name: Clear existing secrets on Cloud Run
-        run: |
-          gcloud run services update clipper-worker-node \
-            --region ${{ env.GCP_REGION }} \
-            --clear-secrets \
-            --clear-env-vars 2>/dev/null || true
 
       - name: Deploy Worker Node to Cloud Run
         run: |

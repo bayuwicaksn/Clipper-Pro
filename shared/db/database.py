@@ -14,18 +14,24 @@ from sqlmodel import SQLModel, Session, create_engine
 
 logger = logging.getLogger(__name__)
 
+from shared.config import settings
+
 # ── Resolve DATABASE_URL ───────────────────────────────────────────────────
-_raw_url = os.getenv("DATABASE_URL")
+_raw_url = settings.DATABASE_URL
+
+if settings.is_production and (not _raw_url or _raw_url.startswith("sqlite")):
+    raise ValueError(
+        "CRITICAL: DATABASE_URL is missing or set to SQLite in a production environment. "
+        "Please ensure the DATABASE_URL secret is correctly configured in GitHub and Cloud Run."
+    )
 
 if not _raw_url:
-    raise ValueError("CRITICAL: DATABASE_URL environment variable is missing or empty. Please check your .env or Cloud Run secrets.")
+    # Fallback for dev if settings somehow failed to provide a default
+    _raw_url = "sqlite:///clipper.db"
 
 # Heroku / Supabase ship postgres:// but SQLAlchemy requires postgresql://
 if _raw_url.startswith("postgres://"):
     _raw_url = _raw_url.replace("postgres://", "postgresql://", 1)
-
-if "://" not in _raw_url:
-    raise ValueError(f"CRITICAL: DATABASE_URL is malformed: '{_raw_url}'. It must be a valid URI (e.g., postgresql://...).")
 
 # ── Engine ────────────────────────────────────────────────────────────────
 _connect_args: dict = {}
