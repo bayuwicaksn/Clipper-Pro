@@ -119,6 +119,7 @@ def download_video(url, output_dir, progress_callback=None):
         'cookiefile': cookies_path,
         'nocheckcertificate': True,
         'noplaylist': True,
+        'verbose': True,
     }
 
     # ─── Execute Download ─────────────────────────────────────────────────────
