@@ -15,14 +15,17 @@ from sqlmodel import SQLModel, Session, create_engine
 logger = logging.getLogger(__name__)
 
 # ── Resolve DATABASE_URL ───────────────────────────────────────────────────
-# We read the env variable directly here instead of importing Settings so that
-# this module can be imported safely even before the full settings object is
-# initialised (e.g. during Alembic migrations or test setups).
-_raw_url = os.getenv("DATABASE_URL", "sqlite:///clipper.db")
+_raw_url = os.getenv("DATABASE_URL")
+
+if not _raw_url:
+    raise ValueError("CRITICAL: DATABASE_URL environment variable is missing or empty. Please check your .env or Cloud Run secrets.")
 
 # Heroku / Supabase ship postgres:// but SQLAlchemy requires postgresql://
 if _raw_url.startswith("postgres://"):
     _raw_url = _raw_url.replace("postgres://", "postgresql://", 1)
+
+if "://" not in _raw_url:
+    raise ValueError(f"CRITICAL: DATABASE_URL is malformed: '{_raw_url}'. It must be a valid URI (e.g., postgresql://...).")
 
 # ── Engine ────────────────────────────────────────────────────────────────
 _connect_args: dict = {}
