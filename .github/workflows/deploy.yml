@@ -134,23 +134,23 @@ jobs:
           build-args: |
             VITE_API_BASE=${{ secrets.BACKEND_URL }}
 
-#      - name: Deploy Frontend to Cloud Run
-#        run: |
-#          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/frontend
-#
-#          gcloud run deploy clipper-frontend \
-#            --image $IMAGE:${{ github.sha }} \
-#            --region ${{ env.GCP_REGION }} \
-#            --platform managed \
-#            --allow-unauthenticated \
-#            --port 8080 \
-#            --timeout 300 \
-#            --cpu-boost \
-#            --memory 512Mi \
-#            --cpu 1 \
-#            --min-instances 0 \
-#            --max-instances 3 \
-#            --set-env-vars "ENVIRONMENT=production"
+      - name: Deploy Frontend to Cloud Run
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/frontend
+
+          gcloud run deploy clipper-frontend \
+            --image $IMAGE:${{ github.sha }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --timeout 300 \
+            --cpu-boost \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --set-env-vars "ENVIRONMENT=production"
 
   # ── Job 2: Build & Push Backend ──────────────────────────────────────
   build-backend:
@@ -199,28 +199,28 @@ jobs:
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend:latest
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend:${{ github.sha }}
 
-#      - name: Clear existing secrets on Cloud Run
-#        run: |
-#          gcloud run services update clipper-backend \
-#            --region ${{ env.GCP_REGION }} \
-#            --clear-secrets \
-#            --clear-env-vars 2>/dev/null || true
-#
-#      - name: Deploy Backend to Cloud Run
-#        run: |
-#          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend
-#
-#          gcloud run deploy clipper-backend \
-#            --image $IMAGE:${{ github.sha }} \
-#            --region ${{ env.GCP_REGION }} \
-#            --platform managed \
-#            --allow-unauthenticated \
-#            --port 8000 \
-#            --memory 1Gi \
-#            --cpu 2 \
-#            --min-instances 0 \
-#            --max-instances 3 \
-#            --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }},GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_TOPIC_JOBS=${{ secrets.PUBSUB_TOPIC_JOBS || 'clipper-jobs' }}"
+      - name: Clear existing secrets on Cloud Run
+        run: |
+          gcloud run services update clipper-backend \
+            --region ${{ env.GCP_REGION }} \
+            --clear-secrets \
+            --clear-env-vars 2>/dev/null || true
+
+      - name: Deploy Backend to Cloud Run
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend
+
+          gcloud run deploy clipper-backend \
+            --image $IMAGE:${{ github.sha }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8000 \
+            --memory 1Gi \
+            --cpu 2 \
+            --min-instances 0 \
+            --max-instances 3 \
+            --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }},GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_TOPIC_JOBS=${{ secrets.PUBSUB_TOPIC_JOBS || 'clipper-jobs' }}"
 
   # ── Job 3: Build & Push Worker GPU ───────────────────────────────────
   build-worker-gpu:
@@ -283,30 +283,30 @@ jobs:
           build-args: |
             WHISPER_MODEL=medium
 
-#      - name: Clear existing secrets on Cloud Run
-#        run: |
-#          gcloud run services update clipper-worker-gpu \
-#            --region ${{ env.GCP_REGION }} \
-#            --clear-secrets \
-#            --clear-env-vars 2>/dev/null || true
-#
-#      - name: Deploy Worker GPU to Cloud Run
-#        run: |
-#          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-gpu
-#
-#          gcloud run deploy clipper-worker-gpu \
-#            --image $IMAGE:${{ github.sha }} \
-#            --region ${{ env.GCP_REGION }} \
-#            --platform managed \
-#            --no-allow-unauthenticated \
-#            --port 8080 \
-#            --memory 4Gi \
-#            --cpu 2 \
-#            --min-instances 0 \
-#            --max-instances 1 \
-#            --timeout 3600 \
-#            --concurrency 1 \
-#            --set-env-vars "ENVIRONMENT=production,WHISPER_MODEL=medium,GPU_ENABLED=false,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_JOBS=${{ secrets.PUBSUB_SUBSCRIPTION_JOBS }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
+      - name: Clear existing secrets on Cloud Run
+        run: |
+          gcloud run services update clipper-worker-gpu \
+            --region ${{ env.GCP_REGION }} \
+            --clear-secrets \
+            --clear-env-vars 2>/dev/null || true
+
+      - name: Deploy Worker GPU to Cloud Run
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-gpu
+
+          gcloud run deploy clipper-worker-gpu \
+            --image $IMAGE:${{ github.sha }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --no-allow-unauthenticated \
+            --port 8080 \
+            --memory 4Gi \
+            --cpu 2 \
+            --min-instances 0 \
+            --max-instances 1 \
+            --timeout 3600 \
+            --concurrency 1 \
+            --set-env-vars "ENVIRONMENT=production,WHISPER_MODEL=medium,GPU_ENABLED=false,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_JOBS=${{ secrets.PUBSUB_SUBSCRIPTION_JOBS }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
 
   # ── Job 4: Build & Push Worker Node ──────────────────────────────────
   build-worker-node:
@@ -362,30 +362,30 @@ jobs:
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node:latest
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node:${{ github.sha }}
 
-#      - name: Clear existing secrets on Cloud Run
-#        run: |
-#          gcloud run services update clipper-worker-node \
-#            --region ${{ env.GCP_REGION }} \
-#            --clear-secrets \
-#            --clear-env-vars 2>/dev/null || true
-#
-#      - name: Deploy Worker Node to Cloud Run
-#        run: |
-#          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node
-#
-#          gcloud run deploy clipper-worker-node \
-#            --image $IMAGE:${{ github.sha }} \
-#            --region ${{ env.GCP_REGION }} \
-#            --platform managed \
-#            --no-allow-unauthenticated \
-#            --port 8080 \
-#            --memory 2Gi \
-#            --cpu 2 \
-#            --min-instances 0 \
-#            --max-instances 1 \
-#            --timeout 1800 \
-#            --concurrency 1 \
-#            --set-env-vars "ENVIRONMENT=production,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_CAPTION=${{ secrets.PUBSUB_SUBSCRIPTION_CAPTION || 'clipper-caption-jobs-sub' }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
+      - name: Clear existing secrets on Cloud Run
+        run: |
+          gcloud run services update clipper-worker-node \
+            --region ${{ env.GCP_REGION }} \
+            --clear-secrets \
+            --clear-env-vars 2>/dev/null || true
+
+      - name: Deploy Worker Node to Cloud Run
+        run: |
+          IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-node
+
+          gcloud run deploy clipper-worker-node \
+            --image $IMAGE:${{ github.sha }} \
+            --region ${{ env.GCP_REGION }} \
+            --platform managed \
+            --no-allow-unauthenticated \
+            --port 8080 \
+            --memory 2Gi \
+            --cpu 2 \
+            --min-instances 0 \
+            --max-instances 1 \
+            --timeout 1800 \
+            --concurrency 1 \
+            --set-env-vars "ENVIRONMENT=production,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},PUBSUB_SUBSCRIPTION_CAPTION=${{ secrets.PUBSUB_SUBSCRIPTION_CAPTION || 'clipper-caption-jobs-sub' }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}"
 
   # ── Job 5: Notify ─────────────────────────────────────────────────────
   notify:
