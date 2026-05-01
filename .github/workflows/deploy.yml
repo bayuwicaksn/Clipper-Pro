@@ -186,15 +186,11 @@ jobs:
       - name: Build & Push Backend
         uses: docker/build-push-action@v5
         with:
-          context: backend
+          context: .
           file: backend/Dockerfile
           push: true
-          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID
-            }}/${{ env.REPO }}/backend:cache
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID
-            }}/${{ env.REPO }}/backend:cache,mode=max
-          build-contexts: |
-            shared=shared
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend:cache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend:cache,mode=max
           tags: |
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend:latest
             ${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/backend:${{ github.sha }}
@@ -209,7 +205,7 @@ jobs:
             --region ${{ env.GCP_REGION }} \
             --platform managed \
             --allow-unauthenticated \
-            --port 8000 \
+            --port 8080 \
             --memory 1Gi \
             --cpu 2 \
             --min-instances 0 \

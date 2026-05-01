@@ -8,31 +8,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements dulu (layer caching)
-COPY requirements.txt .
+# Copy requirements
+COPY backend/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# shared di-inject via --build-context saat build
-# Jika tidak ada, skip (tidak required untuk backend minimal)
-COPY --from=shared . /app/shared/
+# Copy shared and backend modules
+COPY shared/ /app/shared/
+COPY backend/ /app/backend/
 
-# Copy backend source as a package so relative imports work
-COPY . /app/backend/
-
-# Create non-root user (security best practice)
+# Create non-root user
 RUN adduser --disabled-password --gecos "" appuser && \
     chown -R appuser:appuser /app
 USER appuser
 
-# Expose port
-EXPOSE 8000
+# Expose port (Cloud Run default)
+EXPOSE 8080
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s \
-  CMD curl -f http://localhost:${PORT:-8000}/health || exit 1
+  CMD curl -f http://localhost:${PORT:-8080}/health || exit 1
 
-# Run FastAPI - Use dynamic PORT for Cloud Run compatibility
-CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 2"]
+# Run FastAPI - Use dynamic PORT (default to 8080)
+CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8080} --workers 2"]
