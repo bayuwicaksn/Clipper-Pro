@@ -56,7 +56,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 #     --index-url https://download.pytorch.org/whl/cu121
 
 # Install remaining requirements
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir --upgrade yt-dlp
 
 # Setup bgutil-ytdlp-pot-provider JS backend for YouTube BotGuard evasion
 RUN git clone https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /app/bgutil-ytdlp-pot-provider && \
