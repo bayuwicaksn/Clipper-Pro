@@ -1,7 +1,3 @@
-from dotenv import load_dotenv
-# Load environment variables FIRST before any shared imports
-load_dotenv()
-
 import os
 import sys
 import json
@@ -10,6 +6,47 @@ import signal
 import time
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
+
+# Setup logging first
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger("worker_node")
+
+# ── Health Check HTTP Server (START ASAP FOR CLOUD RUN) ────────────────
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health' or self.path == '/':
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.end_headers()
+            status = "ok" # Simplified for speed
+            self.wfile.write(json.dumps({"status": status, "worker": "node"}).encode())
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, format, *args):
+        pass
+
+def start_health_server():
+    port = int(os.getenv("PORT", "8080"))
+    try:
+        server = HTTPServer(("0.0.0.0", port), HealthHandler)
+        logger.info(f"âœ… Health server listening on port {port}")
+        server.serve_forever()
+    except Exception as e:
+        logger.error(f"â Œ Failed to start health server: {e}")
+
+# Start health server in a background thread IMMEDIATELY
+health_thread = threading.Thread(target=start_health_server, daemon=True)
+health_thread.start()
+
+# Now proceed with heavy imports and setup
+from dotenv import load_dotenv
+load_dotenv()
 
 # Fix path so it can find 'src' and 'shared'
 from pathlib import Path
@@ -48,25 +85,6 @@ def update_job_db(job_id: str, data: dict):
         logger.error(f"[{job_id}] Database update failed: {e}")
         return False
 
-# ── Health Check HTTP Server ──────────────────────────────────────────
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.end_headers()
-        status = "ok" if not shutdown_event.is_set() else "shutting_down"
-        self.wfile.write(json.dumps({"status": status, "worker": "node"}).encode())
-
-    def log_message(self, format, *args):
-        pass
-
-
-def start_health_server():
-    port = int(os.getenv("PORT", "8080"))
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    logger.info(f"Health server listening on port {port}")
-    while not shutdown_event.is_set():
-        server.handle_request()
 
 
 # ── Rendering Logic ───────────────────────────────────────────────────
@@ -286,9 +304,6 @@ if __name__ == "__main__":
     # Setup Structured Logging
     from shared.utils.logging_utils import setup_structured_logging
     setup_structured_logging()
-
-    health_thread = threading.Thread(target=start_health_server, daemon=True)
-    health_thread.start()
 
     logger.info("Node Worker starting listeners...")
     pull_messages()

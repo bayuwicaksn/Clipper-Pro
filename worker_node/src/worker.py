@@ -20,7 +20,5 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
 
-    health_thread = threading.Thread(target=start_health_server, daemon=True)
-    health_thread.start()
-
+    logger.info("Node Worker Entry Point: starting listeners...")
     pull_messages()
