@@ -132,15 +132,3 @@ export const deleteExport = (jobId: string, filename: string) =>
 
 // ─── Utils ───────────────────────────────────────────────────────────────────
 
-export const uploadCookies = (file: File) => {
-  const formData = new FormData();
-  formData.append('file', file);
-  return apiFetch<{ message: string }>('/api/upload-cookies', {
-    method: 'POST',
-    body: formData,
-    headers: {
-      // Don't set Content-Type for FormData, browser will do it with boundary
-      'Content-Type': '', 
-    },
-  });
-};

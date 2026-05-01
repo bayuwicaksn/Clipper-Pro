@@ -310,28 +310,6 @@ export default function HomeLayout({
                     </select>
                   </div>
                   <div className="setting-card">
-                    <label className="setting-label">YouTube Auth</label>
-                    <label 
-                      className="generate-btn" 
-                      style={{ display: 'inline-block', textAlign: 'center', cursor: 'pointer', padding: '10px 15px', marginTop: '5px' }}
-                    >
-                      Update Cookies (.txt)
-                      <input 
-                        type="file" 
-                        accept=".txt" 
-                        style={{ display: 'none' }}
-                        onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (file) {
-                            api.uploadCookies(file)
-                            .then(data => notify(data.message || 'Cookies updated', 'success'))
-                            .catch(err => notify('Failed to upload cookies: ' + err.message, 'error'));
-                          }
-                        }}
-                      />
-                    </label>
-                  </div>
-                  <div className="setting-card">
                     <label className="setting-label">Reframe Mode</label>
                     <select
                       className="setting-select"

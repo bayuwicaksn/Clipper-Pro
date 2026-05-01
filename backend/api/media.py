@@ -280,31 +280,3 @@ async def delete_export(job_id: str, filename: str):
     raise HTTPException(status_code=404, detail='Export file not found')
 
 
-@router.post('/upload-cookies')
-async def upload_cookies(file: UploadFile = File(...)):
-    """Upload cookies.txt for yt-dlp authentication and store in GCS."""
-    if not file.filename:
-        raise HTTPException(status_code=400, detail='No file selected')
-    
-    content = await file.read()
-    
-    # Save locally (backend container)
-    cookies_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'cookies.txt')
-    with open(cookies_path, 'wb') as f:
-        f.write(content)
-    
-    # Save to GCS for workers
-    bucket_name = os.getenv("GCS_BUCKET")
-    if bucket_name:
-        try:
-            from google.cloud import storage
-            client = storage.Client()
-            bucket = client.bucket(bucket_name)
-            blob = bucket.blob('cookies.txt')
-            blob.upload_from_string(content, content_type='text/plain')
-            print(f"[STORAGE] Uploaded cookies.txt to gs://{bucket_name}/cookies.txt")
-        except Exception as e:
-            print(f"[STORAGE] Failed to upload cookies to GCS: {e}")
-            # Don't fail the whole request, maybe local is enough for now
-    
-    return {'message': 'cookies.txt uploaded successfully to backend and storage!', 'path': cookies_path}
