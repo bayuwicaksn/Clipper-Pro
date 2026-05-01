@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     wget \
     nodejs \
+    npm \
     # General utils
     git \
     && rm -rf /var/lib/apt/lists/*
@@ -56,6 +57,12 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Install remaining requirements
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Setup bgutil-ytdlp-pot-provider JS backend for YouTube BotGuard evasion
+RUN git clone https://github.com/Brainicism/bgutil-ytdlp-pot-provider.git /app/bgutil-ytdlp-pot-provider && \
+    cd /app/bgutil-ytdlp-pot-provider/server && \
+    npm ci && \
+    npx tsc
 
 # Pre-download Whisper model saat build (DISABLED: Using API for now)
 # ARG WHISPER_MODEL=medium

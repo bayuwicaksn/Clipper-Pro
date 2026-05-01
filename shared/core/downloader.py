@@ -111,6 +111,9 @@ def download_video(url, output_dir, progress_callback=None):
         'extractor_args': {
             'youtube': {
                 'player_client': ['mweb', 'default']
+            },
+            'youtubepot-bgutilscript': {
+                'server_home': ['/app/bgutil-ytdlp-pot-provider/server']
             }
         },
         
