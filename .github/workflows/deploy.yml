@@ -282,7 +282,7 @@ jobs:
             --image $IMAGE:${{ github.sha }} \
             --region ${{ env.GCP_REGION }} \
             --platform managed \
-            --no-allow-unauthenticated \
+            --allow-unauthenticated \
             --port 8080 \
             --memory 4Gi \
             --cpu 2 \
@@ -355,7 +355,7 @@ jobs:
             --image $IMAGE:${{ github.sha }} \
             --region ${{ env.GCP_REGION }} \
             --platform managed \
-            --no-allow-unauthenticated \
+            --allow-unauthenticated \
             --port 8080 \
             --memory 2Gi \
             --cpu 2 \
