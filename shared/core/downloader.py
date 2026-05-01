@@ -108,13 +108,10 @@ def download_video(url, output_dir, progress_callback=None):
         'retries': 5,
         'socket_timeout': 30,
         
-        # Anti-Bot Strategy (Client spoofing with PO Token support)
+        # Anti-Bot Strategy (Client spoofing saja, tanpa bgutil)
         'extractor_args': {
             'youtube': {
                 'player_client': ['mweb', 'default']
-            },
-            'youtubepot-bgutilhttp': {
-                'base_url': ['http://127.0.0.1:4416']
             }
         },
         
