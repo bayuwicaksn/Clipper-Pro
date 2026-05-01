@@ -415,6 +415,16 @@ jobs:
               --quiet
           fi
 
+          # Grant Storage Object Viewer permission on the bucket
+          BUCKET_NAME="${{ secrets.GCS_BUCKET }}"
+          if [ -n "$BUCKET_NAME" ]; then
+            echo "Granting Storage Object Viewer on gs://$BUCKET_NAME to $SA_EMAIL..."
+            gcloud storage buckets add-iam-policy-binding gs://$BUCKET_NAME \
+              --member="serviceAccount:$SA_EMAIL" \
+              --role="roles/storage.objectViewer" \
+              --quiet
+          fi
+
           # Ambil URL worker setelah deploy
           GPU_URL=$(gcloud run services describe clipper-worker-gpu \
             --region ${{ env.GCP_REGION }} --format 'value(status.url)' 2>/dev/null || echo "")
