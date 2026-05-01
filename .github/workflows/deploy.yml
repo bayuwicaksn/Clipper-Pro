@@ -394,7 +394,9 @@ jobs:
           CAPTION_TOPIC="${{ secrets.PUBSUB_TOPIC_CAPTION || 'clipper-caption-jobs' }}"
           CAPTION_SUB="${{ secrets.PUBSUB_SUBSCRIPTION_CAPTION || 'clipper-caption-jobs-sub' }}"
 
-          SA_EMAIL="${{ secrets.client_email }}"
+          # Extract SA email from JSON key
+          SA_EMAIL=$(echo '${{ secrets.GCP_SA_KEY }}' | python3 -c "import sys,json; print(json.load(sys.stdin)['client_email'])")
+          echo "SA Email: $SA_EMAIL"
 
           # Ensure SA has invoker permissions for private workers
           if gcloud run services describe clipper-worker-gpu --region ${{ env.GCP_REGION }} >/dev/null 2>&1; then
