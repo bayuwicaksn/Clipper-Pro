@@ -1,4 +1,4 @@
-﻿"""
+"""
 Downloader â€” YouTube video + subtitle download via yt-dlp
 """
 
@@ -61,9 +61,11 @@ def download_video(url, output_dir, progress_callback=None):
     # Find cookies file
     cookies_arg = []
     cookies_locations = [
-        os.path.join(os.path.dirname(os.path.dirname(__file__)), 'cookies.txt'),
-        '/content/cookies.txt',
-        '/content/clipperApp/cookies.txt',
+        'cookies.txt',                                                # Root current dir
+        os.path.join(os.getcwd(), 'cookies.txt'),                     # Absolute current dir
+        '/app/cookies.txt',                                           # Standard Docker path
+        os.path.join(os.path.dirname(os.path.dirname(__file__)), 'cookies.txt'), # shared/cookies.txt
+        '/content/cookies.txt',                                       # Legacy/Colab
     ]
     for cp in cookies_locations:
         if os.path.exists(cp):
