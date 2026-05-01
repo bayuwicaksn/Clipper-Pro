@@ -394,7 +394,7 @@ jobs:
           CAPTION_TOPIC="${{ secrets.PUBSUB_TOPIC_CAPTION || 'clipper-caption-jobs' }}"
           CAPTION_SUB="${{ secrets.PUBSUB_SUBSCRIPTION_CAPTION || 'clipper-caption-jobs-sub' }}"
 
-          SA_EMAIL="${{ secrets.GCP_SA_EMAIL }}"
+          SA_EMAIL="${{ secrets.client_email }}"
 
           # Ensure SA has invoker permissions for private workers
           if gcloud run services describe clipper-worker-gpu --region ${{ env.GCP_REGION }} >/dev/null 2>&1; then
@@ -427,7 +427,7 @@ jobs:
             echo "Updating subscription for GPU to PUSH mode..."
             gcloud pubsub subscriptions update "$JOBS_SUB" \
               --push-endpoint="$GPU_URL/pubsub" \
-              --push-auth-service-account=${{ secrets.GCP_SA_EMAIL }} \
+              --push-auth-service-account="$SA_EMAIL" \
               --ack-deadline=600
           fi
 
@@ -436,7 +436,7 @@ jobs:
             echo "Updating subscription for Node to PUSH mode..."
             gcloud pubsub subscriptions update "$CAPTION_SUB" \
               --push-endpoint="$NODE_URL/pubsub" \
-              --push-auth-service-account=${{ secrets.GCP_SA_EMAIL }} \
+              --push-auth-service-account="$SA_EMAIL" \
               --ack-deadline=300
           fi
 
