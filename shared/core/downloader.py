@@ -58,9 +58,26 @@ def download_video(url, output_dir, progress_callback=None):
             'metadata': metadata,
         }
 
-    # Find cookies file
+    # ── Find cookies file ──────────────────────────────────────────────────
+    cookies_path_tmp = '/tmp/cookies.txt'
+    
+    # Check GCS first (central storage for UI uploads)
+    bucket_name = os.getenv("GCS_BUCKET")
+    if bucket_name:
+        try:
+            from google.cloud import storage
+            client = storage.Client()
+            bucket = client.bucket(bucket_name)
+            blob = bucket.blob('cookies.txt')
+            if blob.exists():
+                blob.download_to_filename(cookies_path_tmp)
+                print(f'[Downloader] Downloaded fresh cookies.txt from gs://{bucket_name}')
+        except Exception as e:
+            print(f'[Downloader] GCS cookies check failed: {e}')
+
     cookies_arg = []
     cookies_locations = [
+        cookies_path_tmp,                                             # /tmp from GCS
         'cookies.txt',                                                # Root current dir
         os.path.join(os.getcwd(), 'cookies.txt'),                     # Absolute current dir
         '/app/cookies.txt',                                           # Standard Docker path
