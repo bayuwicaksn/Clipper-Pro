@@ -57,25 +57,44 @@ def download_video(url, output_dir, progress_callback=None):
     unique_id = uuid.uuid4().hex
     tmp_cookie_file = os.path.join(tempfile.gettempdir(), f'cookies_{unique_id}.txt')
     
+    # ─── Proxy & Cookie Selection (Auto-Rotation Support) ─────────────────────
+    proxy_url = os.getenv("PROXY_URL")
+    cookie_name = os.getenv("COOKIE_NAME", "cookies.txt")
+    
+    proxy_list_json = os.getenv("PROXY_LIST_JSON")
+    if proxy_list_json:
+        try:
+            import json, random
+            proxies = json.loads(proxy_list_json)
+            if isinstance(proxies, list) and len(proxies) > 0:
+                selected = random.choice(proxies)
+                proxy_url = selected.get('url', proxy_url)
+                cookie_name = selected.get('cookie', cookie_name)
+                print(f"[Downloader] Auto-rotation active. Selected proxy and matching cookie: {cookie_name}")
+        except Exception as e:
+            print(f"[Downloader] Failed to parse PROXY_LIST_JSON: {e}")
+
     bucket_name = os.getenv("GCS_BUCKET")
+    print(f"[Downloader] Checking GCS for cookies. Bucket: {bucket_name or 'NOT_SET'}, Path: clipper_pro/cookies/{cookie_name}")
+    
     client = get_storage_client()
     if bucket_name and client:
         try:
             bucket = client.bucket(bucket_name)
-            blob = bucket.blob('cookies.txt')
+            # Automatically look in the specific project folder
+            full_cookie_path = f"clipper_pro/cookies/{cookie_name}" if "/" not in cookie_name else cookie_name
+            blob = bucket.blob(full_cookie_path)
             if blob.exists():
                 blob.download_to_filename(tmp_cookie_file)
                 cookies_path = tmp_cookie_file
-                print(f'[Downloader] Downloaded fresh cookies.txt from gs://{bucket_name}')
+                print(f'[Downloader] SUCCESS: Downloaded matching cookies ({full_cookie_path}) from gs://{bucket_name}')
+            else:
+                print(f'[Downloader] FAILED: File {full_cookie_path} not found in bucket {bucket_name}')
         except Exception as e:
-            print(f'[Downloader] GCS cookies check failed: {e}')
-
+            print(f'[Downloader] ERROR: GCS cookies check failed: {e}')
+ 
     if not cookies_path:
-        # Fallback locations if GCS fails
-        for cp in ['cookies.txt', '/app/cookies.txt']:
-            if os.path.exists(cp):
-                cookies_path = cp
-                break
+        print(f'[Downloader] WARNING: Proceeding without cookies (Risk of 403). Cookie file was not found or GCS is not configured.')
 
     # ─── Progress Hook ────────────────────────────────────────────────────────
     def my_hook(d):
