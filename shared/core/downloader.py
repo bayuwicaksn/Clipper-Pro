@@ -81,8 +81,8 @@ def download_video(url, output_dir, progress_callback=None):
     if bucket_name and client:
         try:
             bucket = client.bucket(bucket_name)
-            # Automatically look in the specific project folder
-            full_cookie_path = f"clipper_pro/cookies/{cookie_name}" if "/" not in cookie_name else cookie_name
+            # Automatically look in the 'cookies/' folder
+            full_cookie_path = f"cookies/{cookie_name}" if "/" not in cookie_name else cookie_name
             blob = bucket.blob(full_cookie_path)
             if blob.exists():
                 blob.download_to_filename(tmp_cookie_file)
