@@ -75,6 +75,8 @@ def download_video(url, output_dir, progress_callback=None):
             print(f"[Downloader] Failed to parse PROXY_LIST_JSON: {e}")
 
     bucket_name = os.getenv("GCS_BUCKET")
+    print(f"[Downloader] Checking GCS for cookies. Bucket: {bucket_name or 'NOT_SET'}, Path: clipper_pro/cookies/{cookie_name}")
+    
     client = get_storage_client()
     if bucket_name and client:
         try:
@@ -85,12 +87,14 @@ def download_video(url, output_dir, progress_callback=None):
             if blob.exists():
                 blob.download_to_filename(tmp_cookie_file)
                 cookies_path = tmp_cookie_file
-                print(f'[Downloader] Downloaded matching cookies ({full_cookie_path}) from gs://{bucket_name}')
+                print(f'[Downloader] SUCCESS: Downloaded matching cookies ({full_cookie_path}) from gs://{bucket_name}')
+            else:
+                print(f'[Downloader] FAILED: File {full_cookie_path} not found in bucket {bucket_name}')
         except Exception as e:
-            print(f'[Downloader] GCS cookies check failed: {e}')
-
+            print(f'[Downloader] ERROR: GCS cookies check failed: {e}')
+ 
     if not cookies_path:
-        print(f'[Downloader] WARNING: No matching cookie file found for this proxy. Proceeding without cookies (Risk of 403).')
+        print(f'[Downloader] WARNING: Proceeding without cookies (Risk of 403). Cookie file was not found or GCS is not configured.')
 
     # ─── Progress Hook ────────────────────────────────────────────────────────
     def my_hook(d):
