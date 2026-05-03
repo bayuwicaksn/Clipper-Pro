@@ -277,6 +277,9 @@ jobs:
       - name: Deploy Worker GPU to Cloud Run
         run: |
           IMAGE=${{ env.REGISTRY }}/${{ secrets.GCP_PROJECT_ID }}/${{ env.REPO }}/worker-gpu
+          
+          # Flatten JSON to single line to prevent shell issues
+          PROXY_JSON=$(echo '${{ secrets.PROXY_LIST_JSON }}' | tr -d '\n')
 
           gcloud run deploy clipper-worker-gpu \
             --image $IMAGE:${{ github.sha }} \
@@ -290,7 +293,7 @@ jobs:
             --max-instances 1 \
             --timeout 3600 \
             --concurrency 1 \
-            --set-env-vars "ENVIRONMENT=production,DATABASE_URL=${{ secrets.DATABASE_URL }},WHISPER_MODEL=medium,GPU_ENABLED=false,GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }},GCS_BUCKET=${{ secrets.GCS_BUCKET }},GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }},SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_KEY=${{ secrets.SUPABASE_KEY }},PROXY_LIST_JSON=${{ secrets.PROXY_LIST_JSON }}"
+            --set-env-vars "^|^ENVIRONMENT=production|DATABASE_URL=${{ secrets.DATABASE_URL }}|WHISPER_MODEL=medium|GPU_ENABLED=false|GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}|GCS_BUCKET=${{ secrets.GCS_BUCKET }}|GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}|OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}|SUPABASE_URL=${{ secrets.SUPABASE_URL }}|SUPABASE_KEY=${{ secrets.SUPABASE_KEY }}|PROXY_LIST_JSON=$PROXY_JSON"
 
   # ── Job 4: Build & Push Worker Node ──────────────────────────────────
   build-worker-node:
