@@ -136,18 +136,21 @@ def download_video(url, output_dir, progress_callback=None):
         'writeautomaticsub': True,
         'subtitleslangs': ['en'],
         
-        # Performance & Networking
+        # Performance & Networking (Optimized for proxy stability)
         'limit_rate': 10000000, # 10M
-        'http_chunk_size': 10485760, # 10M
+        'http_chunk_size': 5242880, # 5MB chunks (safer for slow proxies)
         'sleep_interval': 1,
-        'retries': 5,
-        'socket_timeout': 30,
-        'proxy': proxy_url, # Use the selected proxy from rotation logic
+        'retries': 10,
+        'fragment_retries': 10,
+        'socket_timeout': 60, # Increased timeout for slow proxy handshakes
+        'proxy': proxy_url,
         
-        # Anti-Bot Strategy (Client spoofing saja, tanpa bgutil)
+        # Anti-Bot Strategy & POT Optimization
         'extractor_args': {
             'youtube': {
-                'player_client': ['mweb', 'default']
+                'player_client': ['mweb', 'default'],
+                # Disable bgutil if it's causing timeouts, prioritize deno/jsc
+                'po_token_provider': ['jsc:deno', 'webview']
             }
         },
         
