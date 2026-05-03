@@ -78,8 +78,8 @@ def download_video(url, output_dir, progress_callback=None):
         print("[Downloader] PROXY_LIST_JSON not found in environment.")
 
     bucket_name = os.getenv("GCS_BUCKET")
-    # Using the exact folder structure requested: clipper_pro/cookies/
-    gcs_prefix = "clipper_pro/cookies/"
+    # Using 'cookies/' folder directly since 'clipper_pro' is the bucket name
+    gcs_prefix = "cookies/"
     full_cookie_path = f"{gcs_prefix}{cookie_name}" if "/" not in cookie_name else cookie_name
     
     print(f"[Downloader] Checking GCS for cookies. Bucket: {bucket_name or 'NOT_SET'}, Path: {full_cookie_path}")
