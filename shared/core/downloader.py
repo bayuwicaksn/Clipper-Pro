@@ -63,6 +63,7 @@ def download_video(url, output_dir, progress_callback=None):
     
     proxy_list_json = os.getenv("PROXY_LIST_JSON")
     if proxy_list_json:
+        print(f"[Downloader] Found PROXY_LIST_JSON (length: {len(proxy_list_json)})")
         try:
             import json, random
             proxies = json.loads(proxy_list_json)
@@ -70,19 +71,23 @@ def download_video(url, output_dir, progress_callback=None):
                 selected = random.choice(proxies)
                 proxy_url = selected.get('url', proxy_url)
                 cookie_name = selected.get('cookie', cookie_name)
-                print(f"[Downloader] Auto-rotation active. Selected proxy and matching cookie: {cookie_name}")
+                print(f"[Downloader] Auto-rotation selected: {cookie_name}")
         except Exception as e:
-            print(f"[Downloader] Failed to parse PROXY_LIST_JSON: {e}")
+            print(f"[Downloader] ERROR parsing PROXY_LIST_JSON: {e}")
+    else:
+        print("[Downloader] PROXY_LIST_JSON not found in environment.")
 
     bucket_name = os.getenv("GCS_BUCKET")
-    print(f"[Downloader] Checking GCS for cookies. Bucket: {bucket_name or 'NOT_SET'}, Path: clipper_pro/cookies/{cookie_name}")
+    # Using the exact folder structure requested: clipper_pro/cookies/
+    gcs_prefix = "clipper_pro/cookies/"
+    full_cookie_path = f"{gcs_prefix}{cookie_name}" if "/" not in cookie_name else cookie_name
+    
+    print(f"[Downloader] Checking GCS for cookies. Bucket: {bucket_name or 'NOT_SET'}, Path: {full_cookie_path}")
     
     client = get_storage_client()
     if bucket_name and client:
         try:
             bucket = client.bucket(bucket_name)
-            # Automatically look in the 'cookies/' folder
-            full_cookie_path = f"cookies/{cookie_name}" if "/" not in cookie_name else cookie_name
             blob = bucket.blob(full_cookie_path)
             if blob.exists():
                 blob.download_to_filename(tmp_cookie_file)
