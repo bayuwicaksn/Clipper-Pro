@@ -71,7 +71,18 @@ def download_video(url, output_dir, progress_callback=None):
                 selected = random.choice(proxies)
                 proxy_url = selected.get('url', proxy_url)
                 cookie_name = selected.get('cookie', cookie_name)
-                print(f"[Downloader] Auto-rotation selected: {cookie_name}")
+                
+                # Cleanup and logging
+                if proxy_url:
+                    proxy_url = proxy_url.strip()
+                    # Mask password for logging: http://user:pass@ip:port -> http://user:***@ip:port
+                    try:
+                        from urllib.parse import urlparse
+                        parsed = urlparse(proxy_url)
+                        masked_proxy = f"{parsed.scheme}://{parsed.username}:***@{parsed.hostname}:{parsed.port}"
+                        print(f"[Downloader] Auto-rotation selected: {cookie_name} via {masked_proxy}")
+                    except:
+                        print(f"[Downloader] Auto-rotation selected: {cookie_name} (Proxy URL format invalid)")
         except Exception as e:
             print(f"[Downloader] ERROR parsing PROXY_LIST_JSON: {e}")
     else:
